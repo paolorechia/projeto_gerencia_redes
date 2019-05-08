@@ -87,7 +87,7 @@ Vagrant.configure("2") do |config|
      apt-get install sqlite sqlite3 libsqlite3-dev -y
      apt-get install libxml2 libxml2-dev -y
      apt-get install cmake libc6-dev libc6-dev-i386 libclang-dev llvm-dev automake pip
-     pip install cxxfilt -y
+     pip install cxxfilt
      apt-get install libgtk2.0-0 libgtk2.0-dev -y
      apt-get install vtun lxc -y
      apt-get install libboost-signals-dev libboost-filesystem-dev -y
