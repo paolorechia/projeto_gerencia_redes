@@ -39,7 +39,7 @@ int main( int argc, char** argv ){
   echoClient.SetAttribute( "Interval", TimeValue( Seconds( 1.0 ) ) );
   echoClient.SetAttribute( "PacketSize", UintegerValue( 1024 ) );
 
-  ApplicationContainer clientApps = echoClient.Install( lan.ns3nodes.Get( 8 ) );
+  ApplicationContainer clientApps = echoClient.Install( lan.ns3nodes.Get( lan.num_of_nodes - 1 ) );
   clientApps.Start( Seconds( 2.0 ) );
   clientApps.Stop( Seconds( 10.0 ) );
 
