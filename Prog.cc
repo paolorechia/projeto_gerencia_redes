@@ -1,7 +1,7 @@
 
 /*
 
-./waf --run 'scratch/Prog Dados.txt'
+./waf --run 'scratch/Prog scratch/Dados.txt'
 
  */
 
@@ -34,8 +34,8 @@ int main( int argc, char** argv ){
   serverApps.Start( Seconds( 1.0 ) );
   serverApps.Stop( Seconds( 10.0 ) );
 
-  UdpEchoClientHelper echoClient( lan.nodes[ 0 ].DeviceAddress( 1 ), 9 );
-  echoClient.SetAttribute( "MaxPackets", UintegerValue( 1 ) );
+  UdpEchoClientHelper echoClient( lan.nodes[ 0 ].getDevice( 1 ).address(), 9 );
+  echoClient.SetAttribute( "MaxPackets", UintegerValue( 10 ) );
   echoClient.SetAttribute( "Interval", TimeValue( Seconds( 1.0 ) ) );
   echoClient.SetAttribute( "PacketSize", UintegerValue( 1024 ) );
 
@@ -45,6 +45,8 @@ int main( int argc, char** argv ){
 
   Simulator::Run();
   Simulator::Destroy();
+
+	printf( "\n\nResultados: %u / %u \n", lan.nodes[ 0 ].devices[ 3 ].receivedPackets(), lan.nodes[ lan.num_of_nodes - 1 ].devices[ 1 ].receivedPackets() );
 
   return 0;
 }

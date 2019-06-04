@@ -20,6 +20,7 @@ class LAN{
 		WifiMacHelper wifimac;
 		Ssid ssid;
 		MobilityHelper mobility;
+	  TrafficControlHelper tch;
 
 	  Ipv4AddressHelper ipv4_n;
 
@@ -48,15 +49,19 @@ LAN::LAN(){
 
   p2p.SetDeviceAttribute( "DataRate", StringValue( "5Mbps" ) );
   p2p.SetChannelAttribute( "Delay", StringValue( "2ms" ) );
+  p2p.SetQueue( "ns3::DropTailQueue", "MaxSize", StringValue( "1p" ) );
 
   csma.SetChannelAttribute( "DataRate", StringValue( "100Mbps" ) );
   csma.SetChannelAttribute( "Delay", TimeValue( NanoSeconds( 6560 ) ) );
+  csma.SetQueue( "ns3::DropTailQueue", "MaxSize", StringValue( "1p" ) );
 
 	wifichannel = YansWifiChannelHelper::Default();
   phy = YansWifiPhyHelper::Default();
   phy.SetChannel( wifichannel.Create() );
 
 	wifi.SetRemoteStationManager( "ns3::AarfWifiManager" );
+
+  tch.SetRootQueueDisc( "ns3::RedQueueDisc" );
 
   ssid = Ssid( "ns-3-ssid" );
 
@@ -137,6 +142,7 @@ int LAN::p2p_connect( List<MyNode*> auxNodes ){
 	NetDeviceContainer n_devs;
 	NodeContainer tempNodes;
 	char base[ 32 ];
+	Ptr<Node>	node;
 	
 	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
 		tempNodes.Add( auxNodes[ Nn ]->ns3node );
@@ -146,10 +152,13 @@ int LAN::p2p_connect( List<MyNode*> auxNodes ){
   ipv4_n.SetBase( base, "255.255.255.0" );
 
   n_devs = p2p.Install( tempNodes );
+  QueueDiscContainer qdiscs = tch.Install( n_devs );
   interfaces = ipv4_n.Assign( n_devs );
 
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
-		auxNodes[ Nn ]->addDevice( P2P_DEVICE, interfaces.GetAddress( Nn ) );
+	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ ){
+		node = tempNodes.Get( Nn );
+		auxNodes[ Nn ]->addDevice( n_devs.Get( Nn ), P2P_DEVICE, interfaces.GetAddress( Nn ), qdiscs.Get( Nn ) );
+	}
 
 	return( 0 );
 }
@@ -161,6 +170,7 @@ int LAN::csma_connect( List<MyNode*> auxNodes ){
 	NetDeviceContainer n_devs;
 	NodeContainer tempNodes;
 	char base[ 32 ];
+	Ptr<Node>	node;
 	
 	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
 		tempNodes.Add( auxNodes[ Nn ]->ns3node );
@@ -170,10 +180,13 @@ int LAN::csma_connect( List<MyNode*> auxNodes ){
   ipv4_n.SetBase( base, "255.255.255.0" );
 
   n_devs = csma.Install( tempNodes );
+  QueueDiscContainer qdiscs = tch.Install( n_devs );
   interfaces = ipv4_n.Assign( n_devs );
 
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
-		auxNodes[ Nn ]->addDevice( CSMA_DEVICE, interfaces.GetAddress( Nn ) );
+	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ ){
+		node = tempNodes.Get( Nn );
+		auxNodes[ Nn ]->addDevice( n_devs.Get( Nn ), CSMA_DEVICE, interfaces.GetAddress( Nn ), qdiscs.Get( Nn ) );
+	}
 
 	return( 0 );
 }
@@ -229,10 +242,10 @@ void LAN::info(){
 
 	printf( "A rede possui %d nodos:\n", num_of_nodes );
 	for( n = 0 ; n < num_of_nodes ; n++ ){
-    printf( "\tNodo %d possui %d conexões.\n", n, nodes[ n ].devices );
-		for( m = 0 ; m < nodes[ n ].devices ; m++ ){
-			printf( "\t\t[ %d ] - %s : ", m, nodes[ n ].DeviceType( m ) );
-			std::cout << nodes[ n ].DeviceAddress( m ) << '\n';
+    printf( "\tNodo %d possui %d conexões.\n", n, nodes[ n ].num_of_devices() );
+		for( m = 0 ; m < nodes[ n ].num_of_devices() ; m++ ){
+			printf( "\t\t[ %d ] - %s : ", m, nodes[ n ].getDevice( m ).type() );
+			std::cout << nodes[ n ].getDevice( m ).address() << '\n';
 		}
   }
 }

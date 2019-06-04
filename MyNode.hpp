@@ -1,49 +1,29 @@
 #ifndef MYNODE_H
 #define MYNODE_H
 
-#include "ns3/core-module.h"
-#include "ns3/network-module.h"
-#include "ns3/csma-module.h"
-#include "ns3/internet-module.h"
-#include "ns3/point-to-point-module.h"
-#include "ns3/applications-module.h"
-#include "ns3/ipv4-global-routing-helper.h"
-#include "ns3/mobility-module.h"
-#include "ns3/yans-wifi-helper.h"
-#include "ns3/ssid.h"
+#include "Device.hpp"
 
-#include "List.hpp"
-
-using namespace ns3;
-
-const char* CSMA_DEVICE = "csma";
-const char* P2P_DEVICE = "p2p";
-const char* WIFI_DEVICE = "wifi";
-const char* WIFIM_DEVICE = "wifim";
 
 // ==================================================================== //
 
 class MyNode{
 	public:
-		Ptr<Node> ns3node;
-		unsigned int devices;
-		List<const char*> devices_types;
-		List<Ipv4Address> devices_ipv4;
+		Ptr<Node> ns3node;											// Aponta para o endereço do nodo do simulador ns3
+		List<Device> devices;										// Lista de dispositivos de transmissão que este nodo possui
 
 	public:
 		MyNode();
 		void create( Ptr<Node> _ns3node );
 		void free();
-		void addDevice( const char* device_types, Ipv4Address device_ipv4 );
-		const char* DeviceType( unsigned int device_num );
-		Ipv4Address& DeviceAddress( unsigned int device_num );
+		void addDevice( Ptr<NetDevice> device, const char* device_type, Ipv4Address device_ipv4, Ptr<QueueDisc> _device_queue );
+		Device& getDevice( unsigned int num );
+		unsigned int num_of_devices();
 };
 
 // -------------------------------------------------------------------- //
 
 MyNode::MyNode(){
 	ns3node = NULL;
-	devices = 0;
 }
 
 // -------------------------------------------------------------------- //
@@ -58,33 +38,26 @@ void MyNode::create( Ptr<Node> _ns3node ){
 
 void MyNode::free(){
 
-	devices_types.Free();
-	devices_ipv4.Free();
-	devices = 0;
+	devices.Free();
 	ns3node = NULL;
 }
 
 // -------------------------------------------------------------------- //
 
-void MyNode::addDevice( const char* device_types, Ipv4Address device_ipv4 ){
-
-	devices_types << device_types;
-	devices_ipv4 << device_ipv4;
-	devices++;
+inline void MyNode::addDevice( Ptr<NetDevice> device, const char* device_type, Ipv4Address device_ipv4, Ptr<QueueDisc> _device_queue ){
+	devices[ devices.Quant ].create( device, device_type, device_ipv4, _device_queue );
 }
 
 // -------------------------------------------------------------------- //
 
-inline const char* MyNode::DeviceType( unsigned int device_num ){
-
-	return( devices_types[ device_num ] );
+inline Device& MyNode::getDevice( unsigned int num ){
+	return( devices[ num ] );
 }
 
 // -------------------------------------------------------------------- //
 
-inline Ipv4Address& MyNode::DeviceAddress( unsigned int device_num ){
-
-	return( devices_ipv4[ device_num ] );
+inline unsigned int MyNode::num_of_devices(){
+	return( devices.Quant );
 }
 
 // ==================================================================== //
