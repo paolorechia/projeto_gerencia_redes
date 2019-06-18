@@ -131,6 +131,8 @@ int LAN::read( char* path ){
 	}
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+	//Ptr<OutputStreamWrapper> Seila( &std::cout );
+	//Ipv4GlobalRoutingHelper::PrintRoutingTableAllEvery( Seconds( 1 ), Seila, Time::Unit::S );
 
   return( 1 );
 }
@@ -150,6 +152,7 @@ int LAN::p2p_connect( List<MyNode*> auxNodes ){
   links++;
 	sprintf( base, "10.1.%d.0", links );
   ipv4_n.SetBase( base, "255.255.255.0" );
+
 
   n_devs = p2p.Install( tempNodes );
   QueueDiscContainer qdiscs = tch.Install( n_devs );
@@ -248,6 +251,7 @@ void LAN::info(){
 			std::cout << nodes[ n ].getDevice( m ).address() << '\n';
 		}
   }
+
 }
 
 // ==================================================================== //
