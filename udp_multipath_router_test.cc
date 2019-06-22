@@ -93,8 +93,10 @@ main (int argc, char *argv[])
   csmaInterfaces = address.Assign (csmaDevices);
 
   // Setup Udp Multipath Router
-  UdpMultipathRouterHelper multipathRouter (9, 10, 11, 12);
-  ApplicationContainer routingApp = multipathRouter.Install (p2pNodes.Get (1));
+  //UdpMultipathRouterHelper multipathRouterHelper (9, 10, 11, 12);
+  Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> (9, 10, 11, 12);
+  p2pNodes.Get (1)->AddApplication(routingApp);
+//  ApplicationContainer routingAppContainer = multipathRouterHelper.Install (p2pNodes.Get (1));
 
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
@@ -113,9 +115,22 @@ main (int argc, char *argv[])
   echoClient2.SetAttribute ("PacketSize", UintegerValue (1024));
 
   clientApps = echoClient2.Install (p2pNodes.Get (0));
-  clientApps.Start (Seconds (2.0));
+  clientApps.Start (Seconds (2.5));
   clientApps.Stop (Seconds (10.0));
 
+  // Receiving Client 1
+  UdpEchoServerHelper echoServer1 (11);
+  ApplicationContainer serverApps = echoServer1.Install (csmaNodes.Get (2));
+  routingApp->SetRemote0( csmaInterfaces.GetAddress(2), 11);
+  serverApps.Start (Seconds (1.0));
+  serverApps.Stop (Seconds (10.0));
+
+  // Receiving Client 1
+  UdpEchoServerHelper echoServer2 (12);
+  serverApps = echoServer2.Install (csmaNodes.Get (3));
+  routingApp->SetRemote1( csmaInterfaces.GetAddress(3), 12);
+  serverApps.Start (Seconds (1.0));
+  serverApps.Stop (Seconds (10.0));
 
 
   MobilityHelper mobility;

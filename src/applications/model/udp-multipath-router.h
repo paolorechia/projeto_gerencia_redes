@@ -127,7 +127,10 @@ public:
    */
   static TypeId GetTypeId (void);
   UdpMultipathRouter ();
+  UdpMultipathRouter (uint16_t iport_0, uint16_t iport_1, uint16_t sport_0, uint16_t sport_1);
   virtual ~UdpMultipathRouter ();
+  void SetRemote0 (Address ip, uint16_t port);
+  void SetRemote1 (Address ip, uint16_t port);
 
 protected:
   virtual void DoDispose (void);
@@ -139,12 +142,12 @@ private:
   void HandleRead (Ptr<Socket> socket);
   void closeReceivingSocket(Ptr<Socket> m_socket);
   void initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
+  void initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address address);
 
-  void RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket);
+  void RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket, Address address);
 
 
   // Tables
-  
   LinkTable linkTable;
   NodeTable nodeTable;
   PathTable pathTable;
@@ -161,8 +164,10 @@ private:
   //  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
   Ptr<Socket> m_sending_socket_0; //!< IPv4 Socket
   Ptr<Socket> m_sending_socket_1; //!< IPv4 Socket
-  void Send (void);
-  void ScheduleTransmit (Time dt);
+  Address m_sending_address_0; //!< Remote peer address
+  Address m_sending_address_1; //!< Remote peer address
+  void Send (Ptr<Packet> packet, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
+  void ScheduleTransmit (Time dt, Ptr<Packet> p, Ptr<Socket> s, Address addr, uint16_t port);
 
   uint32_t m_count; //!< Maximum number of packets the application will send
   Time m_interval; //!< Packet inter-send time
@@ -173,8 +178,6 @@ private:
   uint32_t m_sent; //!< Counter for sent packets
 
   Ptr<Socket> m_socket; //!< Socket
-  Address m_peerAddress; //!< Remote peer address
-  uint16_t m_peerPort; //!< Remote peer port
   EventId m_sendEvent; //!< Event to send the next packet
 //  Ptr<Socket> m_sending_socketsocket_3; //!< IPv4 Socket
   Address m_local; //!< local multicast address
