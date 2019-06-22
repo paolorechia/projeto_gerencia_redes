@@ -38,36 +38,42 @@ NS_LOG_COMPONENT_DEFINE ("UdpMultipathRouterApplication");
 
 NS_OBJECT_ENSURE_REGISTERED (UdpMultipathRouter);
 
-/* LinkTableEntry methods */
+/* LinkTable methods */
+LinkTableEntry::LinkTableEntry(uint32_t capacity, uint32_t use, Time measure, uint32_t counter)
+{
+  link_capacity = capacity;
+  current_use = use;
+  last_measure = Simulator::Now();
+  packet_counter  = counter;
+}
 LinkTable::LinkTable()
 {
-
 }
-LinkTable::~LinkTable()
+
+/* NodeTable methods */
+NodeTableEntry::NodeTableEntry(uint32_t node, Ipv4Address addr, 
+                     uint16_t port, Ptr<Socket> socket,
+                     uint32_t link)
 {
-  NS_LOG_FUNCTION (this);
+  node_id = node;
+  dest_addr = addr;
+  dest_port = port;
+  dest_socket = socket;
+  link = link_id;
 }
-
-/* NodeTableEntry methods */
 NodeTable::NodeTable()
 {
-
 }
-NodeTable::~NodeTable()
+/* PathTable methods */
+PathTableEntry::PathTableEntry(Ipv4Address addr, uint16_t port, uint32_t node)
 {
-  NS_LOG_FUNCTION (this);
+  src_addr = addr;
+  src_port = port;
+  node_id = node;
 }
-
-/* PathTableEntry methods */
 PathTable::PathTable()
 {
-
 }
-PathTable::~PathTable()
-{
-  NS_LOG_FUNCTION (this);
-}
-
 /* UdpMultipathRouter methods */
 TypeId
 UdpMultipathRouter::GetTypeId (void)
@@ -127,6 +133,11 @@ UdpMultipathRouter::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
   Application::DoDispose ();
+  /*
+  LinkTable::DoDispose ();
+  PathTable::DoDispose ();
+  NodeTable::DoDispose ();
+  */
 }
 
 void

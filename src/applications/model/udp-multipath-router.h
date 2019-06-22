@@ -37,11 +37,10 @@ class Packet;
 class Time;
 
 
-class LinkTableEntry : public Object
+class LinkTableEntry
 {
 public:
-  LinkTableEntry ();
-  virtual ~LinkTableEntry ();
+  LinkTableEntry (uint32_t capacity, uint32_t use, Time measure, uint32_t counter);
 
 private:
   uint32_t link_capacity; // byte number
@@ -50,27 +49,22 @@ private:
   uint32_t packet_counter;
 };
 
-class LinkTable : public Object 
+class LinkTable
 {
 public:
   LinkTable ();
-  virtual ~LinkTable ();
 
 private:
   std::list<LinkTableEntry> entries;
 };
 
 
-class NodeTableEntry : public Object
+class NodeTableEntry
 {
 public:
-  
-  static TypeId GetTypeId (void);
-  NodeTableEntry ();
-  virtual ~NodeTableEntry ();
-
-protected:
-  virtual void DoDispose (void);
+  NodeTableEntry(uint32_t node, Ipv4Address addr, 
+                     uint16_t port, Ptr<Socket> socket,
+                     uint32_t link);
 
 private:
   uint32_t node_id;
@@ -81,25 +75,20 @@ private:
 };
 
 
-class NodeTable : public Object
+class NodeTable
 {
 public:
   NodeTable ();
-  virtual ~NodeTable ();
 
 private:
   std::list<NodeTableEntry> entries;
   
 };
 
-class PathTableEntry : public Object
+class PathTableEntry
 {
 public:
-  PathTableEntry ();
-  virtual ~PathTableEntry ();
-
-protected:
-  virtual void DoDispose (void);
+  PathTableEntry(Ipv4Address addr, uint16_t port, uint32_t node);
 
 private:
   Ipv4Address src_addr;
@@ -107,11 +96,10 @@ private:
   uint32_t node_id;
 };
 
-class PathTable : public Object
+class PathTable
 {
 public:
   PathTable ();
-  virtual ~PathTable ();
 
 private:
   std::list<PathTableEntry> entries;
