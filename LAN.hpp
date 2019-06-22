@@ -1,6 +1,7 @@
 #ifndef LAN_H
 #define LAN_H
 
+#include "MyIpv4GlobalRoutingHelper.hpp"
 #include "MyNode.hpp"
 
 // ==================================================================== //
@@ -130,9 +131,19 @@ int LAN::read( char* path ){
 			break;
 	}
 
+/*
+	char Temp[ 128 ];
+	strcpy( Temp, path );
+	strcpy( Temp + strlen( Temp ) - 3, "xml" );
+  AnimationInterface Anim( Temp );
+
+	for( Uint Nn = 0 ; Nn < ns3nodes.GetN() ; Nn++ ){
+		puts("Setando");
+		Ptr<Node> TempNode = ns3nodes.Get( Nn );
+		Anim.SetConstantPosition( TempNode, 100 + Nn, 200 + Nn * 2 );
+	}
+*/
   Ipv4GlobalRoutingHelper::PopulateRoutingTables();
-	//Ptr<OutputStreamWrapper> Seila( &std::cout );
-	//Ipv4GlobalRoutingHelper::PrintRoutingTableAllEvery( Seconds( 1 ), Seila, Time::Unit::S );
 
   return( 1 );
 }
