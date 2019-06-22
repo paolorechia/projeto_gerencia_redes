@@ -66,7 +66,7 @@ main (int argc, char *argv[])
   csmaNodes.Create (nCsma);
 
   PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
+  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("2ms"));
 
   NetDeviceContainer p2pDevices;
@@ -92,6 +92,7 @@ main (int argc, char *argv[])
   Ipv4InterfaceContainer csmaInterfaces;
   csmaInterfaces = address.Assign (csmaDevices);
 
+  // Setup first connection
   UdpEchoServerHelper echoServer (9);
 
   ApplicationContainer serverApps = echoServer.Install (csmaNodes.Get (nCsma));
@@ -99,13 +100,29 @@ main (int argc, char *argv[])
   serverApps.Stop (Seconds (10.0));
 
   UdpEchoClientHelper echoClient (csmaInterfaces.GetAddress (nCsma), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
+  echoClient.SetAttribute ("MaxPackets", UintegerValue (100));
+  echoClient.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
   echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
   ApplicationContainer clientApps = echoClient.Install (p2pNodes.Get (0));
   clientApps.Start (Seconds (2.0));
   clientApps.Stop (Seconds (10.0));
+
+  // Setup second connection
+  UdpEchoServerHelper echoServer2 (10);
+
+  serverApps = echoServer2.Install (csmaNodes.Get (1));
+  serverApps.Start (Seconds (2.0));
+  serverApps.Stop (Seconds (11.0));
+
+  UdpEchoClientHelper echoClient2 (csmaInterfaces.GetAddress (1), 10);
+  echoClient2.SetAttribute ("MaxPackets", UintegerValue (100));
+  echoClient2.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
+  echoClient2.SetAttribute ("PacketSize", UintegerValue (1024));
+
+  clientApps = echoClient2.Install (p2pNodes.Get (0));
+  clientApps.Start (Seconds (2.5));
+  clientApps.Stop (Seconds (8.0));
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
@@ -125,9 +142,9 @@ main (int argc, char *argv[])
   AnimationInterface anim  ("second_test.xml");
   anim.SetConstantPosition( p2pNodes.Get(0), 0, 5);
   anim.SetConstantPosition( p2pNodes.Get(1), 5, 5);
-  anim.SetConstantPosition( csmaNodes.Get(0), 10, 0);
-  anim.SetConstantPosition( csmaNodes.Get(1), 10, 5);
-  anim.SetConstantPosition( csmaNodes.Get(2), 10, 10);
+  anim.SetConstantPosition( csmaNodes.Get(1), 10, 0);
+  anim.SetConstantPosition( csmaNodes.Get(2), 10, 5);
+  anim.SetConstantPosition( csmaNodes.Get(3), 10, 10);
 
   Simulator::Run ();
   Simulator::Destroy ();
