@@ -38,6 +38,7 @@ NS_LOG_COMPONENT_DEFINE ("UdpMultipathRouterApplication");
 
 NS_OBJECT_ENSURE_REGISTERED (UdpMultipathRouter);
 
+/* main Router code here */
 TypeId
 UdpMultipathRouter::GetTypeId (void)
 {
@@ -63,7 +64,7 @@ UdpMultipathRouter::GetTypeId (void)
                    MakeUintegerChecker<uint16_t> ())
                    /*
     .AddAttribute ("SendingPort2", "Port on which we retransmit received packets.",
-                   UintegerValue (12),
+                   UintegerValue (13),
                    MakeUintegerAccessor (&UdpMultipathRouter::m_sending_port_2),
                    MakeUintegerChecker<uint16_t> ())
                    */
@@ -168,24 +169,111 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
       m_rxTraceWithAddresses (packet, from, localAddress);
       if (InetSocketAddress::IsMatchingType (from))
         {
-          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s server received " << packet->GetSize () << " bytes from " <<
+          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s router received " << packet->GetSize () << " bytes from " <<
                        InetSocketAddress::ConvertFrom (from).GetIpv4 () << " port " <<
                        InetSocketAddress::ConvertFrom (from).GetPort ());
         }
+//      RoutePacket(packet, socket);
       packet->RemoveAllPacketTags ();
       packet->RemoveAllByteTags ();
-/*
-      NS_LOG_LOGIC ("Echoing packet");
-      socket->SendTo (packet, 0, from);
+  }
+}
+void
+UdpMultipathRouter::RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket)
+{
 
+      NS_LOG_INFO("Routing packet to destination");
+      /*
+      socket->SendTo (packet, 0, from);
       if (InetSocketAddress::IsMatchingType (from))
         {
-          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s server sent " << packet->GetSize () << " bytes to " <<
+          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s router sent " << packet->GetSize () << " bytes to " <<
                        InetSocketAddress::ConvertFrom (from).GetIpv4 () << " port " <<
                        InetSocketAddress::ConvertFrom (from).GetPort ());
         }
-*/
-  }
+      */
+}
+
+
+void 
+UdpMultipathRouter::ScheduleTransmit (Time dt)
+{
+  NS_LOG_FUNCTION (this << dt);
+  m_sendEvent = Simulator::Schedule (dt, &UdpMultipathRouter::Send, this);
+}
+
+void 
+UdpMultipathRouter::Send (void)
+{
+  NS_LOG_FUNCTION (this);
+
+  NS_ASSERT (m_sendEvent.IsExpired ());
+
+  Ptr<Packet> p;
+  if (m_dataSize)
+    {
+      //
+      // If m_dataSize is non-zero, we have a data buffer of the same size that we
+      // are expected to copy and send.  This state of affairs is created if one of
+      // the Fill functions is called.  In this case, m_size must have been set
+      // to agree with m_dataSize
+      //
+      NS_ASSERT_MSG (m_dataSize == m_size, "UdpEchoClient::Send(): m_size and m_dataSize inconsistent");
+      NS_ASSERT_MSG (m_data, "UdpEchoClient::Send(): m_dataSize but no m_data");
+      p = Create<Packet> (m_data, m_dataSize);
+    }
+  else
+    {
+      //
+      // If m_dataSize is zero, the client has indicated that it doesn't care
+      // about the data itself either by specifying the data size by setting
+      // the corresponding attribute or by not calling a SetFill function.  In
+      // this case, we don't worry about it either.  But we do allow m_size
+      // to have a value different from the (zero) m_dataSize.
+      //
+      p = Create<Packet> (m_size);
+    }
+  Address localAddress;
+  m_socket->GetSockName (localAddress);
+  // call to the trace sinks before the packet is actually sent,
+  // so that tags added to the packet can be sent as well
+  m_txTrace (p);
+  if (Ipv4Address::IsMatchingType (m_peerAddress))
+    {
+      m_txTraceWithAddresses (p, localAddress, InetSocketAddress (Ipv4Address::ConvertFrom (m_peerAddress), m_peerPort));
+    }
+  else if (Ipv6Address::IsMatchingType (m_peerAddress))
+    {
+      m_txTraceWithAddresses (p, localAddress, Inet6SocketAddress (Ipv6Address::ConvertFrom (m_peerAddress), m_peerPort));
+    }
+  m_socket->Send (p);
+  ++m_sent;
+
+  if (Ipv4Address::IsMatchingType (m_peerAddress))
+    {
+      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s client sent " << m_size << " bytes to " <<
+                   Ipv4Address::ConvertFrom (m_peerAddress) << " port " << m_peerPort);
+    }
+  else if (Ipv6Address::IsMatchingType (m_peerAddress))
+    {
+      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s client sent " << m_size << " bytes to " <<
+                   Ipv6Address::ConvertFrom (m_peerAddress) << " port " << m_peerPort);
+    }
+  else if (InetSocketAddress::IsMatchingType (m_peerAddress))
+    {
+      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s client sent " << m_size << " bytes to " <<
+                   InetSocketAddress::ConvertFrom (m_peerAddress).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (m_peerAddress).GetPort ());
+    }
+  else if (Inet6SocketAddress::IsMatchingType (m_peerAddress))
+    {
+      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s client sent " << m_size << " bytes to " <<
+                   Inet6SocketAddress::ConvertFrom (m_peerAddress).GetIpv6 () << " port " << Inet6SocketAddress::ConvertFrom (m_peerAddress).GetPort ());
+    }
+
+  if (m_sent < m_count) 
+    {
+      ScheduleTransmit (m_interval);
+    }
 }
 
 } // Namespace ns3

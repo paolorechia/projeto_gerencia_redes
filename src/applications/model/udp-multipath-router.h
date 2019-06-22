@@ -19,7 +19,7 @@
 #ifndef UDP_MULTIPATH_ROUTER
 #define UDP_MULTIPATH_ROUTER
 
-#define NUMBER_PORTS 4
+// #define NUMBER_PORTS 4
 
 #include "ns3/application.h"
 #include "ns3/event-id.h"
@@ -32,6 +32,46 @@ namespace ns3 {
 class Socket;
 class Packet;
 
+
+class QoSStub : public Object
+{
+  uint32_t stub;
+};
+
+class NodeTable : public Object
+{
+public:
+  
+  static TypeId GetTypeId (void);
+  NodeTable ();
+  virtual ~NodeTable ();
+
+protected:
+  virtual void DoDispose (void);
+
+private:
+  uint32_t node_id;
+  Ipv4Address dest_addr;
+  uint16_t dest_port;
+  Ptr<Socket> dest_socket;
+  QoSStub qos;
+};
+
+class PathTable : public Object
+{
+public:
+  PathTable ();
+  virtual ~PathTable ();
+
+protected:
+  virtual void DoDispose (void);
+
+private:
+  Ipv4Address src_addr;
+  uint16_t src_port;
+  uint32_t node_id;
+};
+
 /**
  * \ingroup applications 
  * \defgroup udpmultipathrouter
@@ -43,6 +83,8 @@ class Packet;
  *
  * Every packet received is routed to another node 
  */
+
+
 class UdpMultipathRouter : public Application 
 {
 public:
@@ -58,7 +100,6 @@ protected:
   virtual void DoDispose (void);
 
 private:
-
   virtual void StartApplication (void);
   virtual void StopApplication (void);
 
@@ -66,15 +107,34 @@ private:
   void closeReceivingSocket(Ptr<Socket> m_socket);
   void initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
 
+  void RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket);
+
   uint16_t m_incoming_port_0; //!< Port on which we listen for incoming packets.
   uint16_t m_incoming_port_1; //!< Port on which we listen for incoming packets.
-  uint16_t m_sending_port_0; //!< Port on which we retransmit packets.
-  uint16_t m_sending_port_1; //!< Port on which we retransmit packets.
-//  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
   Ptr<Socket> m_incoming_socket_0; //!< IPv4 Socket
   Ptr<Socket> m_incoming_socket_1; //!< IPv4 Socket
+
+  /* Sending Section */
+  uint16_t m_sending_port_0; //!< Port on which we retransmit packets.
+  uint16_t m_sending_port_1; //!< Port on which we retransmit packets.
+  //  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
   Ptr<Socket> m_sending_socket_0; //!< IPv4 Socket
   Ptr<Socket> m_sending_socket_1; //!< IPv4 Socket
+  void Send (void);
+  void ScheduleTransmit (Time dt);
+
+  uint32_t m_count; //!< Maximum number of packets the application will send
+  Time m_interval; //!< Packet inter-send time
+  uint32_t m_size; //!< Size of the sent packet
+
+  uint32_t m_dataSize; //!< packet payload size (must be equal to m_size)
+  uint8_t *m_data; //!< packet payload data
+  uint32_t m_sent; //!< Counter for sent packets
+
+  Ptr<Socket> m_socket; //!< Socket
+  Address m_peerAddress; //!< Remote peer address
+  uint16_t m_peerPort; //!< Remote peer port
+  EventId m_sendEvent; //!< Event to send the next packet
 //  Ptr<Socket> m_sending_socketsocket_3; //!< IPv4 Socket
   Address m_local; //!< local multicast address
 
@@ -82,6 +142,10 @@ private:
   TracedCallback<Ptr<const Packet> > m_rxTrace;
   /// Callbacks for tracing the packet Rx events, includes source and destination addresses
   TracedCallback<Ptr<const Packet>, const Address &, const Address &> m_rxTraceWithAddresses;
+  /// Callbacks for tracing the packet Tx events
+  TracedCallback<Ptr<const Packet> > m_txTrace;
+  /// Callbacks for tracing the packet Tx events, includes source and destination addresses
+  TracedCallback<Ptr<const Packet>, const Address &, const Address &> m_txTraceWithAddresses;
 };
 
 } // namespace ns3
