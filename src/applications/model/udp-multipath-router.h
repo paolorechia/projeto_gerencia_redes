@@ -26,25 +26,48 @@
 #include "ns3/ptr.h"
 #include "ns3/address.h"
 #include "ns3/traced-callback.h"
+#include "ns3/nstime.h"
+#include <list>
+#include <iterator>
 
 namespace ns3 {
 
 class Socket;
 class Packet;
+class Time;
 
 
-class QoSStub : public Object
+class LinkTableEntry : public Object
 {
-  uint32_t stub;
+public:
+  LinkTableEntry ();
+  virtual ~LinkTableEntry ();
+
+private:
+  uint32_t link_capacity; // byte number
+  uint32_t current_use; // byte
+  Time last_measure;
+  uint32_t packet_counter;
 };
 
-class NodeTable : public Object
+class LinkTable : public Object 
+{
+public:
+  LinkTable ();
+  virtual ~LinkTable ();
+
+private:
+  std::list<LinkTableEntry> entries;
+};
+
+
+class NodeTableEntry : public Object
 {
 public:
   
   static TypeId GetTypeId (void);
-  NodeTable ();
-  virtual ~NodeTable ();
+  NodeTableEntry ();
+  virtual ~NodeTableEntry ();
 
 protected:
   virtual void DoDispose (void);
@@ -54,14 +77,26 @@ private:
   Ipv4Address dest_addr;
   uint16_t dest_port;
   Ptr<Socket> dest_socket;
-  QoSStub qos;
+  uint32_t link_id;
 };
 
-class PathTable : public Object
+
+class NodeTable : public Object
 {
 public:
-  PathTable ();
-  virtual ~PathTable ();
+  NodeTable ();
+  virtual ~NodeTable ();
+
+private:
+  std::list<NodeTableEntry> entries;
+  
+};
+
+class PathTableEntry : public Object
+{
+public:
+  PathTableEntry ();
+  virtual ~PathTableEntry ();
 
 protected:
   virtual void DoDispose (void);
@@ -70,6 +105,16 @@ private:
   Ipv4Address src_addr;
   uint16_t src_port;
   uint32_t node_id;
+};
+
+class PathTable : public Object
+{
+public:
+  PathTable ();
+  virtual ~PathTable ();
+
+private:
+  std::list<PathTableEntry> entries;
 };
 
 /**
@@ -108,6 +153,14 @@ private:
   void initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
 
   void RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket);
+
+
+  // Tables
+  
+  LinkTable linkTable;
+  NodeTable nodeTable;
+  PathTable pathTable;
+  
 
   uint16_t m_incoming_port_0; //!< Port on which we listen for incoming packets.
   uint16_t m_incoming_port_1; //!< Port on which we listen for incoming packets.

@@ -38,7 +38,37 @@ NS_LOG_COMPONENT_DEFINE ("UdpMultipathRouterApplication");
 
 NS_OBJECT_ENSURE_REGISTERED (UdpMultipathRouter);
 
-/* main Router code here */
+/* LinkTableEntry methods */
+LinkTable::LinkTable()
+{
+
+}
+LinkTable::~LinkTable()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+/* NodeTableEntry methods */
+NodeTable::NodeTable()
+{
+
+}
+NodeTable::~NodeTable()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+/* PathTableEntry methods */
+PathTable::PathTable()
+{
+
+}
+PathTable::~PathTable()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+/* UdpMultipathRouter methods */
 TypeId
 UdpMultipathRouter::GetTypeId (void)
 {
