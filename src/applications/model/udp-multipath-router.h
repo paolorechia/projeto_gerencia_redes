@@ -48,25 +48,29 @@ private:
 
 
 
-class LinkTableEntry
+class ChannelTableEntry
 {
 public:
-  LinkTableEntry (uint32_t capacity, uint32_t use, Time measure, uint32_t counter);
-
-private:
-  uint32_t link_capacity; // byte number
+  ChannelTableEntry (uint32_t link_id, uint32_t capacity);
+  uint32_t channel_id;
+  uint32_t channel_capacity; // byte number
   uint32_t current_use; // byte
   Time last_measure;
-  uint32_t packet_counter;
+  uint32_t byte_counter;
 };
 
-class LinkTable
+class ChannelTable
 {
 public:
-  LinkTable ();
+  ChannelTable ();
+  void AddChannelEntry (uint32_t id, uint32_t capacity);
+  void UpdateChannelByteCounter (uint32_t id, uint32_t routed_bytes);
+  void UpdateChannelsCurrentUse();
+  void LogChannelTable () ;
+  void ScheduleChannelTableUpdate( Time dt );
 
 private:
-  std::list<LinkTableEntry> entries;
+  std::list<ChannelTableEntry> entries;
 };
 
 
@@ -82,7 +86,7 @@ private:
   Ipv4Address dest_addr;
   uint16_t dest_port;
   Ptr<Socket> dest_socket;
-  uint32_t link_id;
+  uint32_t channel_id;
 };
 
 
@@ -142,6 +146,11 @@ public:
   void SetPath0 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
   void SetPath1 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
   void SetPath2 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
+  
+  // Tables
+  ChannelTable channelTable;
+  NodeTable nodeTable;
+  PathTable pathTable;
 
 protected:
   virtual void DoDispose (void);
@@ -158,10 +167,6 @@ private:
   void RoutePacket (uint32_t packet_size, Address address, Ptr<Socket> socket);
 
   void CheckIpv4 (Address ipv4address, uint16_t m_port);
-  // Tables
-  LinkTable linkTable;
-  NodeTable nodeTable;
-  PathTable pathTable;
   
   SocketWrapper incoming_sw_0; //!< IPv4 Socket
   SocketWrapper incoming_sw_1; //!< IPv4 Socket

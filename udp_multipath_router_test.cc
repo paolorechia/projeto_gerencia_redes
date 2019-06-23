@@ -29,6 +29,8 @@
 #include "ns3/wifi-net-device.h"
 #include "ns3/ssid.h"
 
+#define PACKET_INTERVAL 0.001
+
 // Network Topology
 //
 //                        Wifi 10.1.3.0
@@ -107,7 +109,6 @@ main (int argc, char *argv[])
   phy.SetChannel (channel.Create ());
 
   WifiHelper wifi;
-  // Assume 1 antena, 20MHz channel...  72 megabits per second
   wifi.SetStandard (WIFI_PHY_STANDARD_80211n_2_4GHZ);
   wifi.SetRemoteStationManager ("ns3::IdealWifiManager");
 
@@ -131,6 +132,7 @@ main (int argc, char *argv[])
   NetDeviceContainer staDevices;
   staDevices = wifi.Install (phy, mac, wifiStaNodes);
 
+  // With 1 antena and 20MHz channel... date rate of 72 megabits per second
   Ptr<YansWifiPhy> phySta = GetYansWifiPhyPtr ( staDevices.Get ( 0 ) );
   NS_ASSERT ( phySta->GetChannelNumber () == 1 );
   NS_ASSERT ( phySta->GetChannelWidth () == 20 );
@@ -161,10 +163,11 @@ main (int argc, char *argv[])
   Ipv4InterfaceContainer staWifiInterfaces;
   staWifiInterfaces = address.Assign (staDevices);
 
+  int maxPackets = 500000;
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (2));
-  echoClient.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
+  echoClient.SetAttribute ("MaxPackets", UintegerValue ( maxPackets ));
+  echoClient.SetAttribute ("Interval", TimeValue ( Seconds ( PACKET_INTERVAL ) ) );
   echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
   ApplicationContainer clientApps = echoClient.Install (p2pNodes.Get (0));
@@ -230,6 +233,9 @@ main (int argc, char *argv[])
                         staWifiInterfaces.GetAddress(0), // destination address
                         33                               // destination port
                        );
+
+  routingApp->channelTable.AddChannelEntry( 0, 100 ); // CSMA Channel
+  routingApp->channelTable.AddChannelEntry( 1, 72 );  // Wi Fi 2.4 GHZ Channel
 
   MobilityHelper mobility;
 

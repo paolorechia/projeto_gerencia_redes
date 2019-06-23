@@ -43,34 +43,91 @@ SocketWrapper::SocketWrapper()
 {
 }
 
-SocketWrapper::SocketWrapper(Ptr<Socket> s, uint16_t p)
+SocketWrapper::SocketWrapper ( Ptr<Socket> s, uint16_t p )
 {
   socket = s;
   listen_port = p;
 }
 
-/* LinkTable methods */
-LinkTableEntry::LinkTableEntry(uint32_t capacity, uint32_t use, Time measure, uint32_t counter)
+/* ChannelTable methods */
+ChannelTableEntry::ChannelTableEntry ( uint32_t id, uint32_t capacity )
 {
-  link_capacity = capacity;
-  current_use = use;
+  channel_id = id;
+  channel_capacity = capacity;
+  current_use = 0;
   last_measure = Simulator::Now();
-  packet_counter  = counter;
+  byte_counter = 0;
 }
-LinkTable::LinkTable()
+ChannelTable::ChannelTable()
 {
+}
+void
+ChannelTable::AddChannelEntry ( uint32_t id, uint32_t capacity )  {
+  entries.push_back( ChannelTableEntry ( id, capacity ) );
+}
+
+// TODO: use Mutex here
+void
+ChannelTable::UpdateChannelByteCounter( uint32_t id, uint32_t routed_bytes ) {
+  NS_LOG_LOGIC(" Updating byte counter " );
+  std::list<ChannelTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ( (*it).channel_id == id ) {
+      NS_LOG_LOGIC( " Found channel id " << id );
+      (*it).byte_counter += routed_bytes;
+      return;
+    }
+  }
+  NS_LOG_LOGIC( " Did not find channel id " << id );
+}
+
+void
+ChannelTable::UpdateChannelsCurrentUse( ) {
+  Time current_time = Simulator::Now();
+  std::list<ChannelTableEntry>::iterator it;
+  ChannelTable::LogChannelTable ( );
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    // Do time diff
+    double time_diff = current_time.GetSeconds() -  (*it).last_measure.GetSeconds();
+    // Compute actual use
+    (*it).current_use = (*it).byte_counter / time_diff; // Should be 1 anyway;
+    // reset byte_counter
+    (*it).byte_counter = 0;
+    // update last_measure
+    (*it).last_measure = current_time;
+    // schedule new update
+  }
+  ChannelTable::LogChannelTable ( );
+  ChannelTable::ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
+}
+
+void
+ChannelTable::LogChannelTable( ) {
+  std::list<ChannelTableEntry>::iterator it;
+    NS_LOG_INFO( "===========================================" );
+    NS_LOG_INFO( "ChannelTable at time: " << Simulator::Now() );
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    NS_LOG_INFO( "| id | \tcapacity| \tuse | \tlast_measure | \t byte_counter " );
+    NS_LOG_INFO( "| " << (*it).channel_id << "|\t" << (*it).channel_capacity  << "\t|\t"
+                    << (*it).current_use << "|\t\t\t" << (*it).last_measure << "|\t" << (*it).byte_counter );
+  }
+}
+
+void
+ChannelTable::ScheduleChannelTableUpdate ( Time dt ) {
+  Simulator::Schedule ( dt, &ChannelTable::UpdateChannelsCurrentUse, this );
 }
 
 /* NodeTable methods */
 NodeTableEntry::NodeTableEntry(uint32_t node, Ipv4Address addr, 
                      uint16_t port, Ptr<Socket> socket,
-                     uint32_t link)
+                     uint32_t channel)
 {
   node_id = node;
   dest_addr = addr;
   dest_port = port;
   dest_socket = socket;
-  link = link_id;
+  channel_id = channel;
 }
 NodeTable::NodeTable()
 {
@@ -126,7 +183,7 @@ UdpMultipathRouter::DoDispose (void)
   NS_LOG_FUNCTION (this);
   Application::DoDispose ();
   /*
-  LinkTable::DoDispose ();
+  ChannelTable::DoDispose ();
   PathTable::DoDispose ();
   NodeTable::DoDispose ();
   */
@@ -212,6 +269,7 @@ UdpMultipathRouter::StartApplication (void)
   m_sending_socket_1 = UdpMultipathRouter::initSendingSocket (m_sending_socket_1, m_sending_port_1, m_sending_address_1); 
   m_sending_socket_2 = UdpMultipathRouter::initSendingSocket (m_sending_socket_2, m_sending_port_2, m_sending_address_2); 
   NS_LOG_INFO("Initialized socket addresses..." << incoming_sw_0.socket << incoming_sw_1.socket << m_sending_socket_0 << m_sending_socket_1 << incoming_sw_2.socket << m_sending_socket_2);
+  channelTable.ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
 }
 
 void 
@@ -238,7 +296,7 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
       m_rxTraceWithAddresses (packet, from, localAddress);
       if (InetSocketAddress::IsMatchingType (from))
         {
-          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () 
+          NS_LOG_LOGIC ("At time " << Simulator::Now ().GetSeconds () 
             << "s router received " << packet->GetSize () << " bytes from "
             << InetSocketAddress::ConvertFrom (from).GetIpv4 () << " port "
             << InetSocketAddress::ConvertFrom (from).GetPort ());
@@ -255,7 +313,7 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
 void
 UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket> socket)
 {
-      NS_LOG_INFO("Routing packet to destination... TODO details");
+      NS_LOG_LOGIC("Routing packet to destination... TODO details");
 //      uint16_t connection_port = InetSocketAddress::ConvertFrom (from).GetPort ();
       Address tmp_addr;
       Ptr<Socket> tmp_socket;
@@ -305,7 +363,7 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
 
 
       CheckIpv4(tmp_addr, send_port);
-      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << " routing of packet (" << packet_size 
+      NS_LOG_LOGIC ("At time " << Simulator::Now ().GetSeconds () << " routing of packet (" << packet_size 
                     << " bytes) from " << InetSocketAddress::ConvertFrom(from).GetIpv4() 
                     << " port: " << listen_port
                     << " to "  << Ipv4Address::ConvertFrom (tmp_addr) << " port: " << send_port);
@@ -362,6 +420,7 @@ void
 UdpMultipathRouter::Send (uint32_t packet_size, Ptr<Socket> socket, Address dest_addr, uint16_t dest_port)
 {
   Ptr<Packet> packet = Create<Packet>(packet_size);
+  channelTable.UpdateChannelByteCounter(0, packet_size);
   NS_LOG_FUNCTION (this);
   CheckIpv4(dest_addr, dest_port);
   Address localAddress;
@@ -372,7 +431,7 @@ UdpMultipathRouter::Send (uint32_t packet_size, Ptr<Socket> socket, Address dest
     {
   //    m_txTraceWithAddresses (packet, localAddress, InetSocketAddress (Ipv4Address::ConvertFrom (dest_addr), dest_port));
     socket->Send (packet);
-    NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s router sent " << packet_size << " bytes to " << Ipv4Address::ConvertFrom (dest_addr) << " port " << dest_port);
+    NS_LOG_LOGIC ("At time " << Simulator::Now ().GetSeconds () << "s router sent " << packet_size << " bytes to " << Ipv4Address::ConvertFrom (dest_addr) << " port " << dest_port);
     }
 }
 
