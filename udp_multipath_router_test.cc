@@ -136,13 +136,15 @@ main (int argc, char *argv[])
   csmaInterfaces = address.Assign (csmaDevices);
   // Wifi network
   address.SetBase ("10.1.3.0", "255.255.255.0");
-  Ipv4InterfaceContainer wifiInterfaces;
-  wifiInterfaces = address.Assign (staDevices);
-  address.Assign (apDevices);
+  Ipv4InterfaceContainer apWifiInterfaces;
+  apWifiInterfaces = address.Assign (apDevices);
+
+  Ipv4InterfaceContainer staWifiInterfaces;
+  staWifiInterfaces = address.Assign (staDevices);
 
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (10));
+  echoClient.SetAttribute ("MaxPackets", UintegerValue (2));
   echoClient.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
   echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
@@ -152,7 +154,7 @@ main (int argc, char *argv[])
 
   // Sender Client 2
   UdpEchoClientHelper echoClient2 (p2pInterfaces.GetAddress (1), 10);
-  echoClient2.SetAttribute ("MaxPackets", UintegerValue (10));
+  echoClient2.SetAttribute ("MaxPackets", UintegerValue (2));
   echoClient2.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
   echoClient2.SetAttribute ("PacketSize", UintegerValue (1024));
 
@@ -162,7 +164,7 @@ main (int argc, char *argv[])
 
   // Sender Client 3
   UdpEchoClientHelper echoClient3 (p2pInterfaces.GetAddress (1), 11);
-  echoClient3.SetAttribute ("MaxPackets", UintegerValue (10));
+  echoClient3.SetAttribute ("MaxPackets", UintegerValue (2));
   echoClient3.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
   echoClient3.SetAttribute ("PacketSize", UintegerValue (1024));
 
@@ -206,7 +208,7 @@ main (int argc, char *argv[])
   routingApp->SetPath2( 
                         p2pInterfaces.GetAddress ( 0 ),  // source address
                         11,                              // source port
-                        wifiInterfaces.GetAddress(0),    // destination address
+                        staWifiInterfaces.GetAddress(0), // destination address
                         33                               // destination port
                        );
 
@@ -221,6 +223,8 @@ main (int argc, char *argv[])
   mobility.Install (csmaNodes);
   mobility.Install (wifiStaNodes);
   mobility.Install (wifiApNode);
+
+  Simulator::Stop (Seconds (10.0));
 
   AnimationInterface anim  ("second_test.xml");
   anim.SetConstantPosition( p2pNodes.Get(0), 0, 5);
