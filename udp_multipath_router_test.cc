@@ -24,7 +24,9 @@
 #include "ns3/netanim-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/netanim-module.h"
+#include "ns3/yans-wifi-phy.h"
 #include "ns3/yans-wifi-helper.h"
+#include "ns3/wifi-net-device.h"
 #include "ns3/ssid.h"
 
 // Network Topology
@@ -41,7 +43,17 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("SecondScriptExample");
+NS_LOG_COMPONENT_DEFINE ("MultipathUdpRouterTest");
+
+// function from ns3 docs
+Ptr<YansWifiPhy>
+ GetYansWifiPhyPtr (const NetDeviceContainer &nc)
+ {
+   Ptr<WifiNetDevice> wnd = nc.Get (0)->GetObject<WifiNetDevice> ();
+   Ptr<WifiPhy> wp = wnd->GetPhy ();
+   return wp->GetObject<YansWifiPhy> ();
+ }
+
 
 int 
 main (int argc, char *argv[])
@@ -95,8 +107,9 @@ main (int argc, char *argv[])
   phy.SetChannel (channel.Create ());
 
   WifiHelper wifi;
-  wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
-
+  // Assume 1 antena, 20MHz channel...  72 megabits per second
+  wifi.SetStandard (WIFI_PHY_STANDARD_80211n_2_4GHZ);
+  wifi.SetRemoteStationManager ("ns3::IdealWifiManager");
 
   Ssid ssid = Ssid ("ns-3-ssid");
   WifiMacHelper mac;
@@ -117,6 +130,12 @@ main (int argc, char *argv[])
 
   NetDeviceContainer staDevices;
   staDevices = wifi.Install (phy, mac, wifiStaNodes);
+
+  Ptr<YansWifiPhy> phySta = GetYansWifiPhyPtr ( staDevices.Get ( 0 ) );
+  NS_ASSERT ( phySta->GetChannelNumber () == 1 );
+  NS_ASSERT ( phySta->GetChannelWidth () == 20 );
+  NS_ASSERT ( phySta->GetFrequency () == 2412 );
+
 
   InternetStackHelper stack;
   stack.Install (p2pNodes.Get (0));
