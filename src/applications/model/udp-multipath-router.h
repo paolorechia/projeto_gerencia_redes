@@ -101,7 +101,7 @@ class PathTable
 public:
   PathTable ();
   void AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id, Ptr<Socket> socket);
-  uint32_t FindDestinationNodeForPath( Address src_addr, uint16_t src_port );
+  uint32_t FindDestinationNodeForPath( Ipv4Address src_addr, uint16_t src_port );
   void LogPathTable( void );
   uint16_t FindPortFromSocket ( Ptr<Socket> socket );
   std::list<PathTableEntry> entries;

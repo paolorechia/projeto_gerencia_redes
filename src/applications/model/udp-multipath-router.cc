@@ -32,6 +32,8 @@
 
 #include "udp-multipath-router.h"
 
+#define NODE_ERROR 16666
+
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("UdpMultipathRouterApplication");
@@ -179,18 +181,16 @@ PathTable::AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node
   entries.push_back( PathTableEntry( src_addr, src_port, node_id, socket ) );
 }
 uint32_t
-PathTable::FindDestinationNodeForPath ( Address src_addr, uint16_t src_port ) {
+PathTable::FindDestinationNodeForPath ( Ipv4Address src_addr, uint16_t src_port ) {
   std::list<PathTableEntry>::iterator it;
   for (it = entries.begin(); it != entries.end(); ++it) {
-    if (
-       Ipv4Address::ConvertFrom((*it).src_addr) == Ipv4Address::ConvertFrom( src_addr )
-    && (*it).src_port == src_port) {
+    InetSocketAddress socket_addr =
+      InetSocketAddress (Ipv4Address::ConvertFrom((*it).src_addr), (*it).src_port);
+    if (socket_addr.GetIpv4 () == src_addr && (*it).src_port == src_port) {
       return (*it).node_id;
-    
     }
-
   }
-  return -1;
+  return NODE_ERROR;
 }
 void
 PathTable::LogPathTable( ) {
@@ -404,7 +404,7 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
 void
 UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket> socket)
 {
-      NS_LOG_LOGIC("Routing packet to destination... TODO details");
+      NS_LOG_LOGIC("Routing packet to destination... ");
 //      uint16_t connection_port = InetSocketAddress::ConvertFrom (from).GetPort ();
       uint16_t listen_port;
       // TODO: build a better way to find the socket listening port
@@ -414,10 +414,17 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
         {
           NS_ASSERT_MSG (false, "Could not find listen port");
         }
+      NS_LOG_LOGIC("Found listen port: " << listen_port);
       // TODO: finish routing here
-      uint32_t node_id = pathTable.FindDestinationNodeForPath( from, listen_port );
+      uint32_t node_id = pathTable.FindDestinationNodeForPath( InetSocketAddress::ConvertFrom(from).GetIpv4( ),
+                                                               listen_port );
+      NS_ASSERT_MSG( (node_id != NODE_ERROR), "Could not find node to route to!" );
+      NS_LOG_LOGIC("Found node ID: " << node_id);
       std::list<NodeTableEntry> available_channels = nodeTable.GetAvailableChannels ( node_id );
+      NS_LOG_LOGIC("Found " << available_channels.size() << " available channels ");
       NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels );
+      NS_LOG_LOGIC("Picked channel... " << chosenPath.channel_id);
+      NS_LOG_LOGIC("Testing destination address and port");
       CheckIpv4(chosenPath.dest_addr, chosenPath.dest_port);
       NS_LOG_LOGIC (
                     "At time " << Simulator::Now ().GetSeconds () << " routing of packet (" << packet_size 
