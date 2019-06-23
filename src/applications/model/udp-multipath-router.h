@@ -36,16 +36,6 @@ class Socket;
 class Packet;
 class Time;
 
-class SocketWrapper
-{
-public:
-  SocketWrapper();
-  SocketWrapper(Ptr<Socket> socket, uint16_t listen_port);
-  Ptr<Socket> socket;
-  uint16_t listen_port;
-private:
-};
-
 class ChannelTableEntry
 {
 public:
@@ -77,7 +67,6 @@ public:
   NodeTableEntry(uint32_t node, Address addr, 
                      uint16_t port, Ptr<Socket> socket,
                      uint32_t link);
-
   uint32_t node_id;
   Address dest_addr;
   uint16_t dest_port;
@@ -100,19 +89,21 @@ public:
 class PathTableEntry
 {
 public:
-  PathTableEntry(Address addr, uint16_t port, uint32_t node);
+  PathTableEntry(Address addr, uint16_t port, uint32_t node, Ptr<Socket> socket);
   Address src_addr;
   uint16_t src_port;
   uint32_t node_id;
+  Ptr<Socket> src_socket;
 };
 
 class PathTable
 {
 public:
   PathTable ();
-  void AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id );
+  void AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id, Ptr<Socket> socket);
   uint32_t FindDestinationNodeForPath( Address src_addr, uint16_t src_port );
-private:
+  void LogPathTable( void );
+  uint16_t FindPortFromSocket ( Ptr<Socket> socket );
   std::list<PathTableEntry> entries;
 };
 
@@ -155,18 +146,15 @@ private:
 
   void HandleRead (Ptr<Socket> socket);
   void closeReceivingSocket(Ptr<Socket> m_socket);
+  void closeReceivingSockets (void);
   Ptr<Socket> initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
+  void initReceivingSockets (void);
   Ptr<Socket> initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address address);
-  void initSendingSockets ( );
+  void initSendingSockets (void);
 
   void RoutePacket (uint32_t packet_size, Address address, Ptr<Socket> socket);
 
   void CheckIpv4 (Address ipv4address, uint16_t m_port);
-  
-  SocketWrapper incoming_sw_0; //!< IPv4 Socket
-  SocketWrapper incoming_sw_1; //!< IPv4 Socket
-  SocketWrapper incoming_sw_2; //!< IPv4 Socket
-  std::list<SocketWrapper> incoming_sw_list;
 
   void Send (uint32_t packet_size, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
   void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);

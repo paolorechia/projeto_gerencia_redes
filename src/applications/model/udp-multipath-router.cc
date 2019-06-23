@@ -38,17 +38,6 @@ NS_LOG_COMPONENT_DEFINE ("UdpMultipathRouterApplication");
 
 NS_OBJECT_ENSURE_REGISTERED (UdpMultipathRouter);
 
-/* SocketWrapper */
-SocketWrapper::SocketWrapper()
-{
-}
-
-SocketWrapper::SocketWrapper ( Ptr<Socket> s, uint16_t p )
-{
-  socket = s;
-  listen_port = p;
-}
-
 /* ChannelTable methods */
 ChannelTableEntry::ChannelTableEntry ( uint32_t id, uint32_t capacity )
 {
@@ -175,18 +164,19 @@ NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes ) {
   return (*it);
 }
 /* PathTable methods */
-PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node)
+PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node, Ptr<Socket> socket)
 {
   src_addr = addr;
   src_port = port;
   node_id = node;
+  src_socket = socket;
 }
 PathTable::PathTable()
 {
 }
 void
-PathTable::AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id )  {
-  entries.push_back( PathTableEntry( src_addr, src_port, node_id ) );
+PathTable::AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id, Ptr<Socket> socket )  {
+  entries.push_back( PathTableEntry( src_addr, src_port, node_id, socket ) );
 }
 uint32_t
 PathTable::FindDestinationNodeForPath ( Address src_addr, uint16_t src_port ) {
@@ -201,6 +191,33 @@ PathTable::FindDestinationNodeForPath ( Address src_addr, uint16_t src_port ) {
 
   }
   return -1;
+}
+void
+PathTable::LogPathTable( ) {
+  std::list<PathTableEntry>::iterator it;
+  NS_LOG_INFO( "===========================================" );
+  NS_LOG_INFO( "PathTable at time: " << Simulator::Now() );
+  NS_LOG_INFO( "| src_addr | src_port | node_id |" );
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    InetSocketAddress socket_addr =
+      InetSocketAddress (Ipv4Address::ConvertFrom((*it).src_addr), (*it).src_port);
+    NS_LOG_INFO(
+                     "|" << socket_addr.GetIpv4 ()
+                  << "|" << (*it).src_port
+                  << "|" << (*it).node_id << "|" 
+               );
+  }
+  NS_LOG_INFO( "===========================================" );
+}
+
+
+uint16_t 
+PathTable::FindPortFromSocket ( Ptr<Socket> socket ) {
+  std::list<PathTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ((*it).src_socket == socket) return (*it).src_port;
+  }
+  return 0;
 }
 /* UdpMultipathRouter methods */
 TypeId
@@ -303,11 +320,17 @@ UdpMultipathRouter::initSendingSocket (Ptr<Socket> socket, uint16_t m_port, Addr
 }
 
 void
+UdpMultipathRouter::initReceivingSockets( ) {
+  std::list<PathTableEntry>::iterator it;
+  for ( it = pathTable.entries.begin(); it != pathTable.entries.end(); ++it ) {
+    (*it).src_socket = UdpMultipathRouter::initReceivingSocket( (*it).src_socket, (*it).src_port);
+  }
+}
+
+void
 UdpMultipathRouter::initSendingSockets ( ) {
-  Ptr<Socket> socket;
   std::list<NodeTableEntry>::iterator it;
   for ( it = nodeTable.entries.begin(); it != nodeTable.entries.end(); ++it ) {
-    socket = (*it).dest_socket;
     (*it).dest_socket = UdpMultipathRouter::initSendingSocket ( (*it).dest_socket,
                                                                 (*it).dest_port, (*it).dest_addr ); 
   }
@@ -322,26 +345,30 @@ UdpMultipathRouter::closeReceivingSocket(Ptr<Socket> socket)
       socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
     }
 }
+void
+UdpMultipathRouter::closeReceivingSockets( ) {
+  std::list<PathTableEntry>::iterator it;
+  for ( it = pathTable.entries.begin(); it != pathTable.entries.end(); ++it ) {
+    UdpMultipathRouter::closeReceivingSocket((*it).src_socket);
+  }
+}
 
 void 
 UdpMultipathRouter::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
-  incoming_sw_0.socket = UdpMultipathRouter::initReceivingSocket( incoming_sw_0.socket, incoming_sw_0.listen_port); 
-  incoming_sw_1.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_1.socket, incoming_sw_1.listen_port); 
-  incoming_sw_2.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_2.socket, incoming_sw_2.listen_port); 
-
+  UdpMultipathRouter::initReceivingSockets ( );
   UdpMultipathRouter::initSendingSockets ( );
   channelTable.ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
+  nodeTable.LogNodeTable();
+  pathTable.LogPathTable();
 }
 
 void 
 UdpMultipathRouter::StopApplication ()
 {
   NS_LOG_FUNCTION (this);
-  UdpMultipathRouter::closeReceivingSocket (incoming_sw_0.socket);
-  UdpMultipathRouter::closeReceivingSocket (incoming_sw_1.socket);
-  UdpMultipathRouter::closeReceivingSocket (incoming_sw_1.socket);
+  UdpMultipathRouter::closeReceivingSockets ( );
 }
 
 void 
@@ -349,6 +376,7 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
 {
   NS_LOG_FUNCTION (this << socket);
 
+  NS_LOG_INFO(" Receiving ");
   Ptr<Packet> packet;
   Address from;
   Address localAddress;
@@ -379,29 +407,14 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
       NS_LOG_LOGIC("Routing packet to destination... TODO details");
 //      uint16_t connection_port = InetSocketAddress::ConvertFrom (from).GetPort ();
       uint16_t listen_port;
-      // TODO: build a better way to find the socket listening port)
+      // TODO: build a better way to find the socket listening port
       // Problem: using socket memory address as comparison and not a proper value for this
-      // Planned to do (search in a list)
-      if (socket == incoming_sw_0.socket)
-        {
-          listen_port = incoming_sw_0.listen_port;
-        }
-      else if (socket == incoming_sw_1.socket)
-        {
-          listen_port = incoming_sw_1.listen_port;
-        }
-      else if (socket == incoming_sw_2.socket)
-        {
-          listen_port = incoming_sw_2.listen_port;
-        }
-      else
+      listen_port = pathTable.FindPortFromSocket(socket);
+      if (listen_port == 0 )
         {
           NS_ASSERT_MSG (false, "Could not find listen port");
         }
-      
-      // TODO: actually use the tables to route packet to correct destination
-      // for now just sending to hardcoded destination address for testing Send Function
-      // (This is essentially a routing table)
+      // TODO: finish routing here
       uint32_t node_id = pathTable.FindDestinationNodeForPath( from, listen_port );
       std::list<NodeTableEntry> available_channels = nodeTable.GetAvailableChannels ( node_id );
       NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels );
@@ -432,24 +445,9 @@ UdpMultipathRouter::CreatePath ( Address source_ip, uint16_t source_port, Addres
   UdpMultipathRouter::CheckIpv4(source_ip, source_port);
   UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
   nodeTable.AddNodeEntry(node_id, dest_ip, dest_port, 0, channel_id); // null socket
-  pathTable.AddPathTableEntry(source_ip, source_port, node_id);
+  pathTable.AddPathTableEntry(source_ip, source_port, node_id, 0); // null socket
 }
 
-/*
-void 
-UdpMultipathRouter::SetPath0(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
-{
-  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
-  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
-  incoming_sw_0.listen_port = source_port;
-  m_sending_address_0 = Address(dest_ip);
-  m_sending_port_0 = dest_port;
-  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_0), m_sending_port_0);
-  NS_LOG_INFO ("Remote 0 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
-}
-*/
-
-//TODO finish this part
 void 
 UdpMultipathRouter::Send (uint32_t packet_size, Ptr<Socket> socket, Address dest_addr, uint16_t dest_port)
 {

@@ -70,8 +70,8 @@ main (int argc, char *argv[])
 
   cmd.Parse (argc,argv);
 
-  LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_ERROR);
-  LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_ERROR);
+  LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
+  LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
 
   nCsma = nCsma == 0 ? 1 : nCsma;
   
@@ -160,7 +160,8 @@ main (int argc, char *argv[])
   Ipv4InterfaceContainer staWifiInterfaces;
   staWifiInterfaces = address.Assign (staDevices);
 
-  int maxPackets = 500000;
+  //int maxPackets = 500000;
+  int maxPackets = 2;
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
   echoClient.SetAttribute ("MaxPackets", UintegerValue ( maxPackets ));
