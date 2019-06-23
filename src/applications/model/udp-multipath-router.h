@@ -36,6 +36,17 @@ class Socket;
 class Packet;
 class Time;
 
+class SocketWrapper
+{
+public:
+  SocketWrapper();
+  SocketWrapper(Ptr<Socket>, uint16_t listen_port);
+  Ptr<Socket> socket;
+  uint16_t listen_port;
+private:
+};
+
+
 
 class LinkTableEntry
 {
@@ -144,7 +155,7 @@ private:
   Ptr<Socket> initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
   Ptr<Socket> initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address address);
 
-  void RoutePacket (uint32_t packet_size, Address address);
+  void RoutePacket (uint32_t packet_size, Address address, Ptr<Socket> socket);
 
   void CheckIpv4 (Address ipv4address, uint16_t m_port);
   // Tables
@@ -152,11 +163,8 @@ private:
   NodeTable nodeTable;
   PathTable pathTable;
   
-
-  uint16_t m_incoming_port_0; //!< Port on which we listen for incoming packets.
-  uint16_t m_incoming_port_1; //!< Port on which we listen for incoming packets.
-  Ptr<Socket> m_incoming_socket_0; //!< IPv4 Socket
-  Ptr<Socket> m_incoming_socket_1; //!< IPv4 Socket
+  SocketWrapper incoming_sw_0; //!< IPv4 Socket
+  SocketWrapper incoming_sw_1; //!< IPv4 Socket
 
   /* Sending Section */
   uint16_t m_sending_port_0; //!< Port on which we retransmit packets.
@@ -171,10 +179,8 @@ private:
 
   uint32_t m_count; //!< Maximum number of packets the application will send
   Time m_interval; //!< Packet inter-send time
-  uint32_t m_size; //!< Size of the sent packet
 
   uint32_t m_dataSize; //!< packet payload size (must be equal to m_size)
-  uint8_t *m_data; //!< packet payload data
   uint32_t m_sent; //!< Counter for sent packets
 
   EventId m_sendEvent; //!< Event to send the next packet
