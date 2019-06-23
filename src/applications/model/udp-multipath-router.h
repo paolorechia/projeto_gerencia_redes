@@ -141,12 +141,12 @@ private:
 
   void HandleRead (Ptr<Socket> socket);
   void closeReceivingSocket(Ptr<Socket> m_socket);
-  void initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
-  void initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address address);
+  Ptr<Socket> initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
+  Ptr<Socket> initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address address);
 
-  void RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket, Address address);
+  void RoutePacket (uint32_t packet_size, Address address);
 
-
+  void CheckIpv4 (Address ipv4address, uint16_t m_port);
   // Tables
   LinkTable linkTable;
   NodeTable nodeTable;
@@ -166,8 +166,8 @@ private:
   Ptr<Socket> m_sending_socket_1; //!< IPv4 Socket
   Address m_sending_address_0; //!< Remote peer address
   Address m_sending_address_1; //!< Remote peer address
-  void Send (Ptr<Packet> packet, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
-  void ScheduleTransmit (Time dt, Ptr<Packet> p, Ptr<Socket> s, Address addr, uint16_t port);
+  void Send (uint32_t packet_size, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
+  void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);
 
   uint32_t m_count; //!< Maximum number of packets the application will send
   Time m_interval; //!< Packet inter-send time
@@ -177,7 +177,6 @@ private:
   uint8_t *m_data; //!< packet payload data
   uint32_t m_sent; //!< Counter for sent packets
 
-  Ptr<Socket> m_socket; //!< Socket
   EventId m_sendEvent; //!< Event to send the next packet
 //  Ptr<Socket> m_sending_socketsocket_3; //!< IPv4 Socket
   Address m_local; //!< local multicast address

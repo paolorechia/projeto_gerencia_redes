@@ -92,12 +92,6 @@ main (int argc, char *argv[])
   Ipv4InterfaceContainer csmaInterfaces;
   csmaInterfaces = address.Assign (csmaDevices);
 
-  // Setup Udp Multipath Router
-  //UdpMultipathRouterHelper multipathRouterHelper (9, 10, 11, 12);
-  Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> (9, 10, 11, 12);
-  p2pNodes.Get (1)->AddApplication(routingApp);
-//  ApplicationContainer routingAppContainer = multipathRouterHelper.Install (p2pNodes.Get (1));
-
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
   echoClient.SetAttribute ("MaxPackets", UintegerValue (10));
@@ -119,19 +113,40 @@ main (int argc, char *argv[])
   clientApps.Stop (Seconds (10.0));
 
   // Receiving Client 1
+  Address addr = csmaInterfaces.GetAddress (2);
+  if (Ipv4Address::IsMatchingType(addr) != true) {
+    NS_ASSERT_MSG (false, "Incompatible address type: " << addr);
+  }
+  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(addr), 11);
+  NS_LOG_INFO ("Initialized sending socket with IP: " << socket_addr);
+  NS_LOG_INFO ("Another format: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
+
+
+  
   UdpEchoServerHelper echoServer1 (11);
   ApplicationContainer serverApps = echoServer1.Install (csmaNodes.Get (2));
-  routingApp->SetRemote0( csmaInterfaces.GetAddress(2), 11);
   serverApps.Start (Seconds (1.0));
   serverApps.Stop (Seconds (10.0));
 
-  // Receiving Client 1
+  // Receiving Client 2
+  addr = csmaInterfaces.GetAddress (3);
+  if (Ipv4Address::IsMatchingType(addr) != true) {
+    NS_ASSERT_MSG (false, "Incompatible address type: " << addr);
+  }
+  socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(addr), 12);
+  NS_LOG_INFO ("Initialized sending socket with IP: " << socket_addr);
+  NS_LOG_INFO ("Another format: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
+
   UdpEchoServerHelper echoServer2 (12);
   serverApps = echoServer2.Install (csmaNodes.Get (3));
-  routingApp->SetRemote1( csmaInterfaces.GetAddress(3), 12);
   serverApps.Start (Seconds (1.0));
   serverApps.Stop (Seconds (10.0));
 
+  // Setup Udp Multipath Router
+  Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> (9, 10, 11, 12);
+  p2pNodes.Get (1)->AddApplication(routingApp);
+  routingApp->SetRemote0( csmaInterfaces.GetAddress (2), 11);
+  routingApp->SetRemote1( csmaInterfaces.GetAddress(3), 12);
 
   MobilityHelper mobility;
 

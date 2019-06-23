@@ -98,17 +98,10 @@ UdpMultipathRouter::GetTypeId (void)
                    UintegerValue (12),
                    MakeUintegerAccessor (&UdpMultipathRouter::m_sending_port_1),
                    MakeUintegerChecker<uint16_t> ())
-                   /*
-    .AddAttribute ("SendAddressTmp", 
-                   "Temporary destination Address of the outbound packets (just for testing)",
+    .AddAttribute ("SendingAddress0", "Temporary destination Address ",
                    AddressValue (),
-                   MakeAddressAccessor (&UdpMultipathRouter::m_sending_add),
+                   MakeAddressAccessor (&UdpMultipathRouter::m_sending_address_0),
                    MakeAddressChecker ())
-    .AddAttribute ("SendingPort2", "Port on which we retransmit received packets.",
-                   UintegerValue (13),
-                   MakeUintegerAccessor (&UdpMultipathRouter::m_sending_port_2),
-                   MakeUintegerChecker<uint16_t> ())
-                   */
     .AddTraceSource ("Rx", "A packet has been received",
                      MakeTraceSourceAccessor (&UdpMultipathRouter::m_rxTrace),
                      "ns3::Packet::TracedCallback")
@@ -158,21 +151,21 @@ UdpMultipathRouter::DoDispose (void)
   */
 }
 
-void
-UdpMultipathRouter::initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port)
+Ptr<Socket>
+UdpMultipathRouter::initReceivingSocket (Ptr<Socket> socket, uint16_t m_port)
 {
-  if (m_socket == 0)
+  if (socket == 0)
     {
       TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
-      m_socket = Socket::CreateSocket (GetNode (), tid);
+      socket = Socket::CreateSocket (GetNode (), tid);
       InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port);
-      if (m_socket->Bind (local) == -1)
+      if (socket->Bind (local) == -1)
         {
           NS_FATAL_ERROR ("Failed to bind socket");
         }
       if (addressUtils::IsMulticast (m_local))
         {
-          Ptr<UdpSocket> udpSocket = DynamicCast<UdpSocket> (m_socket);
+          Ptr<UdpSocket> udpSocket = DynamicCast<UdpSocket> (socket);
           if (udpSocket)
             {
               // equivalent to setsockopt (MCAST_JOIN_GROUP)
@@ -184,40 +177,47 @@ UdpMultipathRouter::initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port)
             }
         }
     }
-  m_socket->SetRecvCallback (MakeCallback (&UdpMultipathRouter::HandleRead, this));
+  NS_LOG_INFO("Initialized receiving socket..." << socket);
+  socket->SetRecvCallback (MakeCallback (&UdpMultipathRouter::HandleRead, this));
+  return socket;
 }
 
-void
-UdpMultipathRouter::initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address addr)
+Ptr<Socket>
+UdpMultipathRouter::initSendingSocket (Ptr<Socket> socket, uint16_t m_port, Address addr)
 {
   NS_LOG_FUNCTION (this);
-  if (m_socket == 0)
+  if (socket == 0)
     {
       TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
-      m_socket = Socket::CreateSocket (GetNode (), tid);
+      socket = Socket::CreateSocket (GetNode (), tid);
       if (Ipv4Address::IsMatchingType(addr) == true)
         {
-          if (m_socket->Bind () == -1)
+          if (socket->Bind () == -1)
             {
               NS_FATAL_ERROR ("Failed to bind socket");
             }
-          m_socket->Connect (InetSocketAddress (Ipv4Address::ConvertFrom(addr), m_port));
+          InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(addr), m_port);
+          socket->Connect (socket_addr);
+          NS_LOG_INFO ("Initialized sending socket with IP: " << socket_addr);
+          NS_LOG_INFO ("Another format: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
         }
       else
         {
           NS_ASSERT_MSG (false, "Incompatible address type: " << addr);
         }
     }
-  m_socket->SetAllowBroadcast (true);
+  NS_LOG_INFO("Initialized sending socket..." << socket);
+  socket->SetAllowBroadcast (true);
+  return socket;
 }
 
 void
-UdpMultipathRouter::closeReceivingSocket(Ptr<Socket> m_socket)
+UdpMultipathRouter::closeReceivingSocket(Ptr<Socket> socket)
 {
-  if (m_socket != 0) 
+  if (socket != 0) 
     {
-      m_socket->Close ();
-      m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
+      socket->Close ();
+      socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
     }
 }
 
@@ -225,10 +225,11 @@ void
 UdpMultipathRouter::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
-  UdpMultipathRouter::initReceivingSocket (m_incoming_socket_0, m_incoming_port_0); 
-  UdpMultipathRouter::initReceivingSocket (m_incoming_socket_1, m_incoming_port_1); 
-  UdpMultipathRouter::initSendingSocket (m_sending_socket_0, m_sending_port_0, m_sending_address_0); 
-  UdpMultipathRouter::initSendingSocket (m_incoming_socket_1, m_incoming_port_1, m_sending_address_1); 
+  m_incoming_socket_0 = UdpMultipathRouter::initReceivingSocket (m_incoming_socket_0, m_incoming_port_0); 
+  m_incoming_socket_1 = UdpMultipathRouter::initReceivingSocket (m_incoming_socket_1, m_incoming_port_1); 
+  m_sending_socket_0 = UdpMultipathRouter::initSendingSocket (m_sending_socket_0, m_sending_port_0, m_sending_address_0); 
+  m_sending_socket_1 = UdpMultipathRouter::initSendingSocket (m_sending_socket_1, m_sending_port_1, m_sending_address_1); 
+  NS_LOG_INFO("Initialized socket addresses..." << m_incoming_socket_0 << m_incoming_socket_1 << m_sending_socket_0 << m_sending_socket_1);
 }
 
 void 
@@ -261,38 +262,47 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
       else {
         NS_ASSERT_MSG (false, "Incompatible address type: " << from);
       }
-      UdpMultipathRouter::RoutePacket(packet, socket, from);
+      // TODO: actually use the tables to route packet to correct destination
+      // for now just sending to hardcoded destination address for testing Send Function
+      // (This is essentially a routing table)
+      UdpMultipathRouter::RoutePacket(packet->GetSize(), from);
       packet->RemoveAllPacketTags ();
       packet->RemoveAllByteTags ();
   }
 }
 void
-UdpMultipathRouter::RoutePacket (Ptr<Packet> packet, Ptr<Socket> socket, Address address)
+UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from)
 {
       NS_LOG_INFO("Routing packet to destination... TODO details");
-      uint16_t recv_port = InetSocketAddress::ConvertFrom (address).GetPort ();
-      // TODO: actually use the tables to route packet to correct destination
-      // for now just sending to hardcoded destination address for testing Send Function
-      // (This is essentially a routing table)
+      NS_LOG_INFO("Testing stored addresses...");
+      CheckIpv4(m_sending_address_0, m_sending_port_0);
+      CheckIpv4(m_sending_address_1, m_sending_port_1);
+      uint16_t recv_port = InetSocketAddress::ConvertFrom (from).GetPort ();
       Address tmp_addr;
+      Ptr<Socket> tmp_socket;
+      uint16_t send_port;
       if (recv_port == 9)
         {
-        tmp_addr = m_sending_address_0;
+        tmp_addr = Address(m_sending_address_0);
+        tmp_socket = m_sending_socket_0;
+        send_port = m_sending_port_0;
         }
       else {
-        tmp_addr = m_sending_address_1;
+        tmp_addr = Address(m_sending_address_1);
+        tmp_socket = m_sending_socket_1;
+        send_port = m_sending_port_1;
       }
-      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s router schedules transmit of" << packet->GetSize () << " bytes to" <<
-                   InetSocketAddress::ConvertFrom (tmp_addr).GetIpv4 () << " port " <<
-                   InetSocketAddress::ConvertFrom (tmp_addr).GetPort ());
-      UdpMultipathRouter::ScheduleTransmit (Simulator::Now (), packet, socket, tmp_addr, 
-                                  InetSocketAddress::ConvertFrom (tmp_addr).GetPort () );
+      NS_LOG_INFO("Testing chosen address...");
+      CheckIpv4(tmp_addr, send_port);
+      NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s router schedules transmition of " << packet_size << " bytes to somewhere...");
+      UdpMultipathRouter::Send(packet_size, m_sending_socket_0, tmp_addr, send_port);
+//      UdpMultipathRouter::ScheduleTransmit (Simulator::Now (), packet_size, tmp_socket, tmp_addr, send_port);
 }
 
 
 void 
-UdpMultipathRouter::ScheduleTransmit (Time dt, Ptr<Packet> p, Ptr<Socket> s, Address addr, uint16_t port)
-{
+UdpMultipathRouter::ScheduleTransmit (Time dt, uint32_t p, Ptr<Socket> s, Address addr, uint16_t port)
+{ 
   NS_LOG_FUNCTION (this << dt);
   m_sendEvent = Simulator::Schedule (dt, &UdpMultipathRouter::Send, this, p, s, addr, port);
 }
@@ -300,38 +310,69 @@ UdpMultipathRouter::ScheduleTransmit (Time dt, Ptr<Packet> p, Ptr<Socket> s, Add
 void 
 UdpMultipathRouter::SetRemote0 (Address ip, uint16_t port)
 {
-  NS_LOG_FUNCTION (this << ip << port);
-  m_sending_address_0 = ip;
+  if (Ipv4Address::IsMatchingType(ip) != true) {
+    NS_ASSERT_MSG (false, "Incompatible address type: " << ip);
+  }
+  UdpMultipathRouter::CheckIpv4(ip, port);
+  m_sending_address_0 = Address(ip);
   m_sending_port_0 = port;
+  NS_LOG_INFO ("Remote 0 IP: "<< ip << " Port: " << port);
+  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_0), m_sending_port_0);
+  NS_LOG_INFO ("Remote 0 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
+  //NS_LOG_INFO ("Stored remote 0 as " << InetSocketAddress::ConvertFrom (m_sending_address_0).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (m_sending_address_0).GetPort ());
 }
 
 void 
 UdpMultipathRouter::SetRemote1 (Address ip, uint16_t port)
 {
-  NS_LOG_FUNCTION (this << ip << port);
-  m_sending_address_1 = ip;
+  if (Ipv4Address::IsMatchingType(ip) != true) {
+    NS_ASSERT_MSG (false, "Incompatible address type: " << ip);
+  }
+  NS_LOG_INFO ("Setting remote 1 IP: "<< ip << " Port: " << port);
+  m_sending_address_1 = Address(ip);
   m_sending_port_1 = port;
+  NS_LOG_INFO ("Remote 1 IP: "<< ip << " Port: " << port);
+  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_1), m_sending_port_1);
+  NS_LOG_INFO ("Remote 1 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
 }
 
 //TODO finish this part
 void 
-UdpMultipathRouter::Send (Ptr<Packet> packet, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port)
+UdpMultipathRouter::Send (uint32_t packet_size, Ptr<Socket> socket, Address dest_addr, uint16_t dest_port)
 {
+  Ptr<Packet> packet = Create<Packet>(packet_size);
   NS_LOG_FUNCTION (this);
+  NS_LOG_INFO ("Entering Send... dest_addr is: " << dest_addr);
+  NS_LOG_INFO("Testing chosen address...");
+  CheckIpv4(dest_addr, dest_port);
+  NS_LOG_INFO("Trying to access local address...");
   Address localAddress;
-  m_socket->GetSockName (localAddress);
+  NS_LOG_INFO("Socket... " << m_sending_socket_0);
+  NS_LOG_INFO("Socket... " << m_sending_socket_1);
+  NS_LOG_INFO("Socket... " << m_incoming_socket_0);
+  NS_LOG_INFO("Socket... " << m_incoming_socket_1);
+  socket->GetSockName (localAddress);
+  NS_LOG_INFO("Socket... " << socket);
+  socket->GetSockName (localAddress);
   // TODO: check what packet tags are about in the docs
-  m_txTrace (packet);
+ // m_txTrace (packet);
   if (Ipv4Address::IsMatchingType (dest_addr))
     {
-      m_txTraceWithAddresses (packet, localAddress, InetSocketAddress (Ipv4Address::ConvertFrom (dest_addr), dest_port));
-    m_socket->Send (packet);
-    NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s client sent " << m_size << " bytes to " << Ipv4Address::ConvertFrom (dest_addr) << " port " << dest_port);
+  //    m_txTraceWithAddresses (packet, localAddress, InetSocketAddress (Ipv4Address::ConvertFrom (dest_addr), dest_port));
+    NS_LOG_INFO("Trying to send...");
+    socket->Send (packet);
+   // NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s client sent " << m_size << " bytes to " << Ipv4Address::ConvertFrom (dest_addr) << " port " << dest_port);
     }
-  else
-    {
-      NS_ASSERT_MSG (false, "Incompatible address type: " << dest_addr);
-    }
+}
+
+void
+UdpMultipathRouter::CheckIpv4(Address ipv4address, uint16_t m_port) {
+  if (Ipv4Address::IsMatchingType(ipv4address) != true) {
+    NS_ASSERT_MSG (false, "Incompatible address type: " << ipv4address);
+  }
+  NS_LOG_INFO ("Checking IP: "<< ipv4address);
+  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(ipv4address), m_port);
+  NS_LOG_INFO ("IPv4: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
 }
 
 } // Namespace ns3
