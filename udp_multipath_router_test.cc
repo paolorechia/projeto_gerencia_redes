@@ -24,10 +24,15 @@
 #include "ns3/netanim-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/netanim-module.h"
+#include "ns3/yans-wifi-helper.h"
+#include "ns3/ssid.h"
 
-// Default Network Topology
+// Network Topology
 //
-//       10.1.1.0
+//                        Wifi 10.1.3.0
+//                   AP
+//                   *          *
+//       10.1.1.0    |          |
 // n0 -------------- n1   n2   n3   n4
 //    point-to-point  |    |    |    |
 //                    ================
@@ -43,6 +48,7 @@ main (int argc, char *argv[])
 {
   bool verbose = true;
   uint32_t nCsma = 3;
+//  uint32_t nWifi = 3;
 
   CommandLine cmd;
   cmd.AddValue ("nCsma", "Number of \"extra\" CSMA nodes/devices", nCsma);
@@ -57,7 +63,8 @@ main (int argc, char *argv[])
     }
 
   nCsma = nCsma == 0 ? 1 : nCsma;
-
+  
+  // Setup point-to-point nodes
   NodeContainer p2pNodes;
   p2pNodes.Create (2);
 
@@ -72,6 +79,7 @@ main (int argc, char *argv[])
   NetDeviceContainer p2pDevices;
   p2pDevices = pointToPoint.Install (p2pNodes);
 
+  // Setup CSMA nodes 
   CsmaHelper csma;
   csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
   csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds (6560)));
@@ -79,18 +87,58 @@ main (int argc, char *argv[])
   NetDeviceContainer csmaDevices;
   csmaDevices = csma.Install (csmaNodes);
 
+  // Setup AP Node and Wifi Channel
+  NodeContainer wifiApNode = p2pNodes.Get (1);
+
+  YansWifiChannelHelper channel = YansWifiChannelHelper::Default ();
+  YansWifiPhyHelper phy = YansWifiPhyHelper::Default ();
+  phy.SetChannel (channel.Create ());
+
+  WifiHelper wifi;
+  wifi.SetRemoteStationManager ("ns3::AarfWifiManager");
+
+
+  Ssid ssid = Ssid ("ns-3-ssid");
+  WifiMacHelper mac;
+  mac.SetType ("ns3::ApWifiMac",
+               "Ssid", SsidValue (ssid));
+  NetDeviceContainer apDevices;
+  apDevices = wifi.Install (phy, mac, wifiApNode);
+
+
+  // Setup Station nodes
+  mac.SetType ("ns3::StaWifiMac",
+               "Ssid", SsidValue (ssid),
+               "ActiveProbing", BooleanValue (false));
+
+  NodeContainer wifiStaNodes;
+  // wifiStaNodes.Create (nWifi); // for now no extra wifi nodes
+  wifiStaNodes.Add ( csmaNodes.Get (3) );
+
+  NetDeviceContainer staDevices;
+  staDevices = wifi.Install (phy, mac, wifiStaNodes);
+
   InternetStackHelper stack;
   stack.Install (p2pNodes.Get (0));
   stack.Install (csmaNodes);
+  // Redundant installs, but our topology may change, be aware!
+//  stack.Install (wifiApNode);
+//  stack.Install (wifiStaNodes);
 
   Ipv4AddressHelper address;
+  // Point to point network
   address.SetBase ("10.1.1.0", "255.255.255.0");
   Ipv4InterfaceContainer p2pInterfaces;
   p2pInterfaces = address.Assign (p2pDevices);
-
+  // CSMA network
   address.SetBase ("10.1.2.0", "255.255.255.0");
   Ipv4InterfaceContainer csmaInterfaces;
   csmaInterfaces = address.Assign (csmaDevices);
+  // Wifi network
+  address.SetBase ("10.1.3.0", "255.255.255.0");
+  Ipv4InterfaceContainer wifiInterfaces;
+  wifiInterfaces = address.Assign (staDevices);
+  address.Assign (apDevices);
 
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
@@ -112,41 +160,55 @@ main (int argc, char *argv[])
   clientApps.Start (Seconds (2.5));
   clientApps.Stop (Seconds (10.0));
 
+  // Sender Client 3
+  UdpEchoClientHelper echoClient3 (p2pInterfaces.GetAddress (1), 11);
+  echoClient3.SetAttribute ("MaxPackets", UintegerValue (10));
+  echoClient3.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
+  echoClient3.SetAttribute ("PacketSize", UintegerValue (1024));
+
+  clientApps = echoClient3.Install (p2pNodes.Get (0));
+  clientApps.Start (Seconds (3.0));
+  clientApps.Stop (Seconds (10.0));
+
   // Receiving Client 1
-  Address addr = csmaInterfaces.GetAddress (2);
-  if (Ipv4Address::IsMatchingType(addr) != true) {
-    NS_ASSERT_MSG (false, "Incompatible address type: " << addr);
-  }
-  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(addr), 11);
-  NS_LOG_INFO ("Initialized sending socket with IP: " << socket_addr);
-  NS_LOG_INFO ("Another format: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
-
-
-  
-  UdpEchoServerHelper echoServer1 (11);
+  UdpEchoServerHelper echoServer1 (31);
   ApplicationContainer serverApps = echoServer1.Install (csmaNodes.Get (2));
   serverApps.Start (Seconds (1.0));
   serverApps.Stop (Seconds (10.0));
 
   // Receiving Client 2
-  addr = csmaInterfaces.GetAddress (3);
-  if (Ipv4Address::IsMatchingType(addr) != true) {
-    NS_ASSERT_MSG (false, "Incompatible address type: " << addr);
-  }
-  socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(addr), 12);
-  NS_LOG_INFO ("Initialized sending socket with IP: " << socket_addr);
-  NS_LOG_INFO ("Another format: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
-
-  UdpEchoServerHelper echoServer2 (12);
+  UdpEchoServerHelper echoServer2 (32);
   serverApps = echoServer2.Install (csmaNodes.Get (3));
   serverApps.Start (Seconds (1.0));
   serverApps.Stop (Seconds (10.0));
 
+  // Receiving Client 3
+  UdpEchoServerHelper echoServer3 (33);
+  serverApps = echoServer3.Install (wifiStaNodes.Get (0));
+  serverApps.Start (Seconds (1.0));
+  serverApps.Stop (Seconds (10.0));
+
   // Setup Udp Multipath Router
-  Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> (9, 10, 11, 12);
+  Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> ();
   p2pNodes.Get (1)->AddApplication(routingApp);
-  routingApp->SetRemote0( csmaInterfaces.GetAddress (2), 11);
-  routingApp->SetRemote1( csmaInterfaces.GetAddress(3), 12);
+  routingApp->SetPath0( 
+                        p2pInterfaces.GetAddress ( 0 ),  // source address
+                        9,                               // source port
+                        csmaInterfaces.GetAddress (2),   // destination address
+                        31                               // destination port
+                      );
+  routingApp->SetPath1( 
+                        p2pInterfaces.GetAddress ( 0 ),  // source address
+                        10,                              // source port
+                        csmaInterfaces.GetAddress(3),    // destination address
+                        32                               // destination port
+                       );
+  routingApp->SetPath2( 
+                        p2pInterfaces.GetAddress ( 0 ),  // source address
+                        11,                              // source port
+                        wifiInterfaces.GetAddress(0),    // destination address
+                        33                               // destination port
+                       );
 
   MobilityHelper mobility;
 
@@ -157,6 +219,8 @@ main (int argc, char *argv[])
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   mobility.Install (p2pNodes);
   mobility.Install (csmaNodes);
+  mobility.Install (wifiStaNodes);
+  mobility.Install (wifiApNode);
 
   AnimationInterface anim  ("second_test.xml");
   anim.SetConstantPosition( p2pNodes.Get(0), 0, 5);

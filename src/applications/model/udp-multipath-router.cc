@@ -108,21 +108,10 @@ UdpMultipathRouter::UdpMultipathRouter ()
   NS_LOG_FUNCTION (this);
   incoming_sw_0.socket = 0;
   incoming_sw_1.socket = 0;
+  incoming_sw_2.socket = 0;
   m_sending_socket_0 = 0;
   m_sending_socket_1 = 0;
-  m_sendEvent = EventId ();
-}
-
-UdpMultipathRouter::UdpMultipathRouter (uint16_t iport_0, uint16_t iport_1, uint16_t sport_0, uint16_t sport_1)
-{
-  NS_LOG_FUNCTION (this);
-  
-  incoming_sw_0.socket = 0;
-  incoming_sw_1.socket = 0;
-  incoming_sw_0.listen_port = iport_0;
-  incoming_sw_1.listen_port = iport_1;
-  m_sending_socket_0 = 0;
-  m_sending_socket_1 = 0;
+  m_sending_socket_2 = 0;
   m_sendEvent = EventId ();
 }
 
@@ -218,9 +207,11 @@ UdpMultipathRouter::StartApplication (void)
   NS_LOG_FUNCTION (this);
   incoming_sw_0.socket = UdpMultipathRouter::initReceivingSocket( incoming_sw_0.socket, incoming_sw_0.listen_port); 
   incoming_sw_1.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_1.socket, incoming_sw_1.listen_port); 
+  incoming_sw_2.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_2.socket, incoming_sw_2.listen_port); 
   m_sending_socket_0 = UdpMultipathRouter::initSendingSocket (m_sending_socket_0, m_sending_port_0, m_sending_address_0); 
   m_sending_socket_1 = UdpMultipathRouter::initSendingSocket (m_sending_socket_1, m_sending_port_1, m_sending_address_1); 
-  NS_LOG_INFO("Initialized socket addresses..." << incoming_sw_0.socket << incoming_sw_1.socket << m_sending_socket_0 << m_sending_socket_1);
+  m_sending_socket_2 = UdpMultipathRouter::initSendingSocket (m_sending_socket_2, m_sending_port_2, m_sending_address_2); 
+  NS_LOG_INFO("Initialized socket addresses..." << incoming_sw_0.socket << incoming_sw_1.socket << m_sending_socket_0 << m_sending_socket_1 << incoming_sw_2.socket << m_sending_socket_2);
 }
 
 void 
@@ -228,6 +219,7 @@ UdpMultipathRouter::StopApplication ()
 {
   NS_LOG_FUNCTION (this);
   UdpMultipathRouter::closeReceivingSocket (incoming_sw_0.socket);
+  UdpMultipathRouter::closeReceivingSocket (incoming_sw_1.socket);
   UdpMultipathRouter::closeReceivingSocket (incoming_sw_1.socket);
 }
 
@@ -280,6 +272,10 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
         {
           listen_port = incoming_sw_1.listen_port;
         }
+      else if (socket == incoming_sw_2.socket)
+        {
+          listen_port = incoming_sw_2.listen_port;
+        }
       else
         {
           NS_ASSERT_MSG (false, "Could not find listen port");
@@ -294,12 +290,20 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
           tmp_socket = m_sending_socket_0;
           send_port = m_sending_port_0;
         }
-      else
+      else if (listen_port == 10)
         {
           tmp_addr = Address(m_sending_address_1);
           tmp_socket = m_sending_socket_1;
           send_port = m_sending_port_1;
         }
+      else if (listen_port == 11 )
+        {
+          tmp_addr = Address(m_sending_address_2);
+          tmp_socket = m_sending_socket_2;
+          send_port = m_sending_port_2;
+        }
+
+
       CheckIpv4(tmp_addr, send_port);
       NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << " routing of packet (" << packet_size 
                     << " bytes) from " << InetSocketAddress::ConvertFrom(from).GetIpv4() 
@@ -318,31 +322,39 @@ UdpMultipathRouter::ScheduleTransmit (Time dt, uint32_t p, Ptr<Socket> s, Addres
 }
 
 void 
-UdpMultipathRouter::SetRemote0 (Address ip, uint16_t port)
+UdpMultipathRouter::SetPath0(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
 {
-  if (Ipv4Address::IsMatchingType(ip) != true) {
-    NS_ASSERT_MSG (false, "Incompatible address type: " << ip);
-  }
-  UdpMultipathRouter::CheckIpv4(ip, port);
-  m_sending_address_0 = Address(ip);
-  m_sending_port_0 = port;
-  NS_LOG_INFO ("Remote 0 IP: "<< ip << " Port: " << port);
+  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
+  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
+  incoming_sw_0.listen_port = source_port;
+  m_sending_address_0 = Address(dest_ip);
+  m_sending_port_0 = dest_port;
   InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_0), m_sending_port_0);
   NS_LOG_INFO ("Remote 0 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
 }
 
-void 
-UdpMultipathRouter::SetRemote1 (Address ip, uint16_t port)
+void
+UdpMultipathRouter::SetPath1(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
 {
-  if (Ipv4Address::IsMatchingType(ip) != true) {
-    NS_ASSERT_MSG (false, "Incompatible address type: " << ip);
-  }
-  NS_LOG_INFO ("Setting remote 1 IP: "<< ip << " Port: " << port);
-  m_sending_address_1 = Address(ip);
-  m_sending_port_1 = port;
-  NS_LOG_INFO ("Remote 1 IP: "<< ip << " Port: " << port);
+  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
+  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
+  incoming_sw_1.listen_port = source_port;
+  m_sending_address_1 = Address(dest_ip);
+  m_sending_port_1 = dest_port;
   InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_1), m_sending_port_1);
   NS_LOG_INFO ("Remote 1 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
+}
+
+void
+UdpMultipathRouter::SetPath2(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
+{
+  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
+  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
+  incoming_sw_2.listen_port = source_port;
+  m_sending_address_2 = Address(dest_ip);
+  m_sending_port_2 = dest_port;
+  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_2), m_sending_port_2);
+  NS_LOG_INFO ("Remote 2 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
 }
 
 //TODO finish this part

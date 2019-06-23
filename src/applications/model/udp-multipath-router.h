@@ -138,10 +138,10 @@ public:
    */
   static TypeId GetTypeId (void);
   UdpMultipathRouter ();
-  UdpMultipathRouter (uint16_t iport_0, uint16_t iport_1, uint16_t sport_0, uint16_t sport_1);
   virtual ~UdpMultipathRouter ();
-  void SetRemote0 (Address ip, uint16_t port);
-  void SetRemote1 (Address ip, uint16_t port);
+  void SetPath0 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
+  void SetPath1 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
+  void SetPath2 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
 
 protected:
   virtual void DoDispose (void);
@@ -165,15 +165,19 @@ private:
   
   SocketWrapper incoming_sw_0; //!< IPv4 Socket
   SocketWrapper incoming_sw_1; //!< IPv4 Socket
+  SocketWrapper incoming_sw_2; //!< IPv4 Socket
 
   /* Sending Section */
   uint16_t m_sending_port_0; //!< Port on which we retransmit packets.
   uint16_t m_sending_port_1; //!< Port on which we retransmit packets.
+  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
   //  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
   Ptr<Socket> m_sending_socket_0; //!< IPv4 Socket
   Ptr<Socket> m_sending_socket_1; //!< IPv4 Socket
+  Ptr<Socket> m_sending_socket_2; //!< IPv4 Socket
   Address m_sending_address_0; //!< Remote peer address
   Address m_sending_address_1; //!< Remote peer address
+  Address m_sending_address_2; //!< Remote peer address
   void Send (uint32_t packet_size, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
   void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);
 
