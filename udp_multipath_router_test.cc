@@ -211,28 +211,38 @@ main (int argc, char *argv[])
 
   // Setup Udp Multipath Router
   Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> ();
-  p2pNodes.Get (1)->AddApplication(routingApp);
-  routingApp->SetPath0( 
-                        p2pInterfaces.GetAddress ( 0 ),  // source address
-                        9,                               // source port
-                        csmaInterfaces.GetAddress (2),   // destination address
-                        31                               // destination port
-                      );
-  routingApp->SetPath1( 
-                        p2pInterfaces.GetAddress ( 0 ),  // source address
-                        10,                              // source port
-                        csmaInterfaces.GetAddress(3),    // destination address
-                        32                               // destination port
-                       );
-  routingApp->SetPath2( 
-                        p2pInterfaces.GetAddress ( 0 ),  // source address
-                        11,                              // source port
-                        staWifiInterfaces.GetAddress(0), // destination address
-                        33                               // destination port
-                       );
 
   routingApp->channelTable.AddChannelEntry( 0, 100 ); // CSMA Channel
   routingApp->channelTable.AddChannelEntry( 1, 72 );  // Wi Fi 2.4 GHZ Channel
+
+  routingApp->CreatePath(
+                          p2pInterfaces.GetAddress ( 0 ),  // source address
+                          9,                               // source port
+                          csmaInterfaces.GetAddress (2),   // destination address
+                          31,                              // destination port
+                          0,                               // destination node id
+                          0                                // channel id
+                        );
+
+  routingApp->CreatePath(
+                          p2pInterfaces.GetAddress ( 0 ),  // source address
+                          10,                              // source port
+                          csmaInterfaces.GetAddress(3),    // destination address
+                          32,                              // destination port
+                          1,                               // destination node id
+                          0                                // channel id
+                        );
+
+  routingApp->CreatePath( 
+                        p2pInterfaces.GetAddress ( 0 ),  // source address
+                        11,                              // source port
+                        staWifiInterfaces.GetAddress(0), // destination address
+                        33,                              // destination port
+                        1,                               // destination node id
+                        1                              // channel id
+                       );
+
+  p2pNodes.Get (1)->AddApplication(routingApp);
 
   MobilityHelper mobility;
 

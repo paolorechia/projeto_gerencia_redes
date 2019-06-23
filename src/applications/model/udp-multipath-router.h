@@ -93,6 +93,7 @@ public:
   void AddNodeEntry( uint32_t node, Address addr, uint16_t port, Ptr<Socket> dest_socket, uint32_t channel_id );
   std::list<NodeTableEntry> GetAvailableChannels ( uint32_t node_id );
   void LogNodeTable( void );
+  NodeTableEntry ChooseBestPath ( std::list<NodeTableEntry> );
 
 private:
   std::list<NodeTableEntry> entries;
@@ -103,8 +104,6 @@ class PathTableEntry
 {
 public:
   PathTableEntry(Address addr, uint16_t port, uint32_t node);
-
-private:
   Address src_addr;
   uint16_t src_port;
   uint32_t node_id;
@@ -115,6 +114,7 @@ class PathTable
 public:
   PathTable ();
   void AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id );
+  uint32_t FindDestinationNodeForPath( Address src_addr, uint16_t src_port );
 private:
   std::list<PathTableEntry> entries;
 };
@@ -144,10 +144,6 @@ public:
   virtual ~UdpMultipathRouter ();
   void CreatePath (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port,
                    uint32_t node_id, uint32_t channel_id);
-  void SetPath0 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
-  void SetPath1 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
-  void SetPath2 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
-  
   // Tables
   ChannelTable channelTable;
   NodeTable nodeTable;

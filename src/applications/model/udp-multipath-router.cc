@@ -168,6 +168,12 @@ NodeTable::LogNodeTable( ) {
   }
   NS_LOG_INFO( "===========================================" );
 }
+NodeTableEntry
+NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes ) {
+  std::list<NodeTableEntry>::iterator it;
+  it = available_pathes.begin();
+  return (*it);
+}
 /* PathTable methods */
 PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node)
 {
@@ -181,6 +187,20 @@ PathTable::PathTable()
 void
 PathTable::AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id )  {
   entries.push_back( PathTableEntry( src_addr, src_port, node_id ) );
+}
+uint32_t
+PathTable::FindDestinationNodeForPath ( Address src_addr, uint16_t src_port ) {
+  std::list<PathTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if (
+       Ipv4Address::ConvertFrom((*it).src_addr) == Ipv4Address::ConvertFrom( src_addr )
+    && (*it).src_port == src_port) {
+      return (*it).node_id;
+    
+    }
+
+  }
+  return -1;
 }
 /* UdpMultipathRouter methods */
 TypeId
@@ -345,9 +365,6 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
 {
       NS_LOG_LOGIC("Routing packet to destination... TODO details");
 //      uint16_t connection_port = InetSocketAddress::ConvertFrom (from).GetPort ();
-      Address tmp_addr;
-      Ptr<Socket> tmp_socket;
-      uint16_t send_port;
       uint16_t listen_port;
       // TODO: build a better way to find the socket listening port)
       // Problem: using socket memory address as comparison and not a proper value for this
@@ -372,32 +389,18 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
       // TODO: actually use the tables to route packet to correct destination
       // for now just sending to hardcoded destination address for testing Send Function
       // (This is essentially a routing table)
-      if (listen_port == 9)
-        {
-          tmp_addr = Address(m_sending_address_0);
-          tmp_socket = m_sending_socket_0;
-          send_port = m_sending_port_0;
-        }
-      else if (listen_port == 10)
-        {
-          tmp_addr = Address(m_sending_address_1);
-          tmp_socket = m_sending_socket_1;
-          send_port = m_sending_port_1;
-        }
-      else if (listen_port == 11 )
-        {
-          tmp_addr = Address(m_sending_address_2);
-          tmp_socket = m_sending_socket_2;
-          send_port = m_sending_port_2;
-        }
-
-
-      CheckIpv4(tmp_addr, send_port);
-      NS_LOG_LOGIC ("At time " << Simulator::Now ().GetSeconds () << " routing of packet (" << packet_size 
+      uint32_t node_id = pathTable.FindDestinationNodeForPath( from, listen_port );
+      std::list<NodeTableEntry> available_channels = nodeTable.GetAvailableChannels ( node_id );
+      NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels );
+      CheckIpv4(chosenPath.dest_addr, chosenPath.dest_port);
+      NS_LOG_LOGIC (
+                    "At time " << Simulator::Now ().GetSeconds () << " routing of packet (" << packet_size 
                     << " bytes) from " << InetSocketAddress::ConvertFrom(from).GetIpv4() 
                     << " port: " << listen_port
-                    << " to "  << Ipv4Address::ConvertFrom (tmp_addr) << " port: " << send_port);
-      UdpMultipathRouter::Send (packet_size, tmp_socket, tmp_addr, send_port);
+                    << " to "  << Ipv4Address::ConvertFrom (chosenPath.dest_addr) 
+                    << " port: " << chosenPath.dest_port
+                   );
+      UdpMultipathRouter::Send (packet_size, chosenPath.dest_socket, chosenPath.dest_addr, chosenPath.dest_port);
 //      UdpMultipathRouter::ScheduleTransmit (Simulator::Now (), packet_size, tmp_socket, tmp_addr, send_port);
 }
 
@@ -418,6 +421,7 @@ UdpMultipathRouter::CreatePath ( Address source_ip, uint16_t source_port, Addres
   Ptr<Socket> socket;
   socket = UdpMultipathRouter::initSendingSocket (socket, dest_port, dest_ip); 
   nodeTable.AddNodeEntry(node_id, dest_ip, dest_port, socket, channel_id);
+  pathTable.AddPathTableEntry(source_ip, source_port, node_id);
 }
 
 /*
