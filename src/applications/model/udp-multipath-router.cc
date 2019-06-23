@@ -303,6 +303,17 @@ UdpMultipathRouter::initSendingSocket (Ptr<Socket> socket, uint16_t m_port, Addr
 }
 
 void
+UdpMultipathRouter::initSendingSockets ( ) {
+  Ptr<Socket> socket;
+  std::list<NodeTableEntry>::iterator it;
+  for ( it = nodeTable.entries.begin(); it != nodeTable.entries.end(); ++it ) {
+    socket = (*it).dest_socket;
+    (*it).dest_socket = UdpMultipathRouter::initSendingSocket ( (*it).dest_socket,
+                                                                (*it).dest_port, (*it).dest_addr ); 
+  }
+}
+
+void
 UdpMultipathRouter::closeReceivingSocket(Ptr<Socket> socket)
 {
   if (socket != 0) 
@@ -319,6 +330,8 @@ UdpMultipathRouter::StartApplication (void)
   incoming_sw_0.socket = UdpMultipathRouter::initReceivingSocket( incoming_sw_0.socket, incoming_sw_0.listen_port); 
   incoming_sw_1.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_1.socket, incoming_sw_1.listen_port); 
   incoming_sw_2.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_2.socket, incoming_sw_2.listen_port); 
+
+  UdpMultipathRouter::initSendingSockets ( );
   channelTable.ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
 }
 
@@ -418,9 +431,7 @@ UdpMultipathRouter::CreatePath ( Address source_ip, uint16_t source_port, Addres
 {
   UdpMultipathRouter::CheckIpv4(source_ip, source_port);
   UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
-  Ptr<Socket> socket;
-  socket = UdpMultipathRouter::initSendingSocket (socket, dest_port, dest_ip); 
-  nodeTable.AddNodeEntry(node_id, dest_ip, dest_port, socket, channel_id);
+  nodeTable.AddNodeEntry(node_id, dest_ip, dest_port, 0, channel_id); // null socket
   pathTable.AddPathTableEntry(source_ip, source_port, node_id);
 }
 

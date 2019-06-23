@@ -94,10 +94,7 @@ public:
   std::list<NodeTableEntry> GetAvailableChannels ( uint32_t node_id );
   void LogNodeTable( void );
   NodeTableEntry ChooseBestPath ( std::list<NodeTableEntry> );
-
-private:
   std::list<NodeTableEntry> entries;
-  
 };
 
 class PathTableEntry
@@ -160,6 +157,7 @@ private:
   void closeReceivingSocket(Ptr<Socket> m_socket);
   Ptr<Socket> initReceivingSocket (Ptr<Socket> m_socket, uint16_t m_port);
   Ptr<Socket> initSendingSocket (Ptr<Socket> m_socket, uint16_t m_port, Address address);
+  void initSendingSockets ( );
 
   void RoutePacket (uint32_t packet_size, Address address, Ptr<Socket> socket);
 
