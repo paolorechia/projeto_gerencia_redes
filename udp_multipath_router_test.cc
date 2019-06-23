@@ -29,7 +29,7 @@
 #include "ns3/wifi-net-device.h"
 #include "ns3/ssid.h"
 
-#define PACKET_INTERVAL 0.001
+#define PACKET_INTERVAL 0.0001
 
 // Network Topology
 //
@@ -70,11 +70,8 @@ main (int argc, char *argv[])
 
   cmd.Parse (argc,argv);
 
-  if (verbose)
-    {
-      LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
-      LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
-    }
+  LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_ERROR);
+  LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_ERROR);
 
   nCsma = nCsma == 0 ? 1 : nCsma;
   
@@ -249,7 +246,7 @@ main (int argc, char *argv[])
   mobility.Install (wifiStaNodes);
   mobility.Install (wifiApNode);
 
-  Simulator::Stop (Seconds (10.0));
+  Simulator::Stop (Seconds (8.0));
 
   AnimationInterface anim  ("second_test.xml");
   anim.SetConstantPosition( p2pNodes.Get(0), 0, 5);

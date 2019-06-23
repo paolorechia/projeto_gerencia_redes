@@ -53,10 +53,10 @@ class ChannelTableEntry
 public:
   ChannelTableEntry (uint32_t link_id, uint32_t capacity);
   uint32_t channel_id;
-  uint32_t channel_capacity; // byte number
-  uint32_t current_use; // byte
+  uint32_t channel_capacity; // megabit/s
+  uint32_t current_use; // megabits/s
   Time last_measure;
-  uint32_t byte_counter;
+  uint32_t byte_counter; // counts in kilobytes
 };
 
 class ChannelTable

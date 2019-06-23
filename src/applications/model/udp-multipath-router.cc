@@ -90,7 +90,8 @@ ChannelTable::UpdateChannelsCurrentUse( ) {
     // Do time diff
     double time_diff = current_time.GetSeconds() -  (*it).last_measure.GetSeconds();
     // Compute actual use
-    (*it).current_use = (*it).byte_counter / time_diff; // Should be 1 anyway;
+    // Converts kilobyte counter to kilobits and then to megabits
+    (*it).current_use = (((*it).byte_counter * 8) / 1024) / time_diff; // Time diff should be 1s;
     // reset byte_counter
     (*it).byte_counter = 0;
     // update last_measure
@@ -107,9 +108,9 @@ ChannelTable::LogChannelTable( ) {
     NS_LOG_INFO( "===========================================" );
     NS_LOG_INFO( "ChannelTable at time: " << Simulator::Now() );
   for (it = entries.begin(); it != entries.end(); ++it) {
-    NS_LOG_INFO( "| id | \tcapacity| \tuse | \tlast_measure | \t byte_counter " );
+    NS_LOG_INFO( "| id | \tcapacity| \tuse | \tlast_measure | \t kilobyte_counter " );
     NS_LOG_INFO( "| " << (*it).channel_id << "|\t" << (*it).channel_capacity  << "\t|\t"
-                    << (*it).current_use << "|\t\t\t" << (*it).last_measure << "|\t" << (*it).byte_counter );
+                    << (*it).current_use << "|" << (*it).last_measure << "|\t" << (*it).byte_counter );
   }
 }
 
@@ -420,7 +421,7 @@ void
 UdpMultipathRouter::Send (uint32_t packet_size, Ptr<Socket> socket, Address dest_addr, uint16_t dest_port)
 {
   Ptr<Packet> packet = Create<Packet>(packet_size);
-  channelTable.UpdateChannelByteCounter(0, packet_size);
+  channelTable.UpdateChannelByteCounter(0, packet_size / 1024);
   NS_LOG_FUNCTION (this);
   CheckIpv4(dest_addr, dest_port);
   Address localAddress;
