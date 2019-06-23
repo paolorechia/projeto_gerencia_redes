@@ -66,7 +66,7 @@ ChannelTable::AddChannelEntry ( uint32_t id, uint32_t capacity )  {
   entries.push_back( ChannelTableEntry ( id, capacity ) );
 }
 
-// TODO: use Mutex here
+// TODO: Maybe use mutex here
 void
 ChannelTable::UpdateChannelByteCounter( uint32_t id, uint32_t routed_bytes ) {
   NS_LOG_LOGIC(" Updating byte counter " );
@@ -120,7 +120,7 @@ ChannelTable::ScheduleChannelTableUpdate ( Time dt ) {
 }
 
 /* NodeTable methods */
-NodeTableEntry::NodeTableEntry(uint32_t node, Ipv4Address addr, 
+NodeTableEntry::NodeTableEntry(uint32_t node, Address addr, 
                      uint16_t port, Ptr<Socket> socket,
                      uint32_t channel)
 {
@@ -133,8 +133,43 @@ NodeTableEntry::NodeTableEntry(uint32_t node, Ipv4Address addr,
 NodeTable::NodeTable()
 {
 }
+void
+NodeTable::AddNodeEntry ( uint32_t node, Address addr, uint16_t port, Ptr<Socket> socket, uint32_t channel)
+{
+  entries.push_back( NodeTableEntry ( node, addr, port, socket, channel ) );
+}
+std::list<NodeTableEntry>
+NodeTable::GetAvailableChannels ( uint32_t id )
+{
+  std::list<NodeTableEntry> availableEntries;
+  std::list<NodeTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ( (*it).node_id == id ) {
+      availableEntries.push_back( ( *it ) );
+      NS_LOG_LOGIC( "Found available channel id " << id << " for node " << id);
+    }
+  }
+  return availableEntries;
+}
+void
+NodeTable::LogNodeTable( ) {
+  std::list<NodeTableEntry>::iterator it;
+  NS_LOG_INFO( "===========================================" );
+  NS_LOG_INFO( "NodeTable at time: " << Simulator::Now() );
+  NS_LOG_INFO( "| node_id | dest_addr | dest_port | dest_socket | channel_id |" );
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    InetSocketAddress socket_addr =
+      InetSocketAddress (Ipv4Address::ConvertFrom((*it).dest_addr), (*it).dest_port);
+    NS_LOG_INFO(   "|" << (*it).node_id
+                << "|" << socket_addr.GetIpv4 ()
+                << "|" << (*it).dest_port
+                << "|" << (*it).dest_socket
+                << "|" << (*it).channel_id  << "|" );
+  }
+  NS_LOG_INFO( "===========================================" );
+}
 /* PathTable methods */
-PathTableEntry::PathTableEntry(Ipv4Address addr, uint16_t port, uint32_t node)
+PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node)
 {
   src_addr = addr;
   src_port = port;
@@ -142,6 +177,10 @@ PathTableEntry::PathTableEntry(Ipv4Address addr, uint16_t port, uint32_t node)
 }
 PathTable::PathTable()
 {
+}
+void
+PathTable::AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id )  {
+  entries.push_back( PathTableEntry( src_addr, src_port, node_id ) );
 }
 /* UdpMultipathRouter methods */
 TypeId
@@ -164,12 +203,6 @@ UdpMultipathRouter::GetTypeId (void)
 UdpMultipathRouter::UdpMultipathRouter ()
 {
   NS_LOG_FUNCTION (this);
-  incoming_sw_0.socket = 0;
-  incoming_sw_1.socket = 0;
-  incoming_sw_2.socket = 0;
-  m_sending_socket_0 = 0;
-  m_sending_socket_1 = 0;
-  m_sending_socket_2 = 0;
   m_sendEvent = EventId ();
 }
 
@@ -266,10 +299,6 @@ UdpMultipathRouter::StartApplication (void)
   incoming_sw_0.socket = UdpMultipathRouter::initReceivingSocket( incoming_sw_0.socket, incoming_sw_0.listen_port); 
   incoming_sw_1.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_1.socket, incoming_sw_1.listen_port); 
   incoming_sw_2.socket = UdpMultipathRouter::initReceivingSocket (incoming_sw_2.socket, incoming_sw_2.listen_port); 
-  m_sending_socket_0 = UdpMultipathRouter::initSendingSocket (m_sending_socket_0, m_sending_port_0, m_sending_address_0); 
-  m_sending_socket_1 = UdpMultipathRouter::initSendingSocket (m_sending_socket_1, m_sending_port_1, m_sending_address_1); 
-  m_sending_socket_2 = UdpMultipathRouter::initSendingSocket (m_sending_socket_2, m_sending_port_2, m_sending_address_2); 
-  NS_LOG_INFO("Initialized socket addresses..." << incoming_sw_0.socket << incoming_sw_1.socket << m_sending_socket_0 << m_sending_socket_1 << incoming_sw_2.socket << m_sending_socket_2);
   channelTable.ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
 }
 
@@ -380,6 +409,18 @@ UdpMultipathRouter::ScheduleTransmit (Time dt, uint32_t p, Ptr<Socket> s, Addres
   m_sendEvent = Simulator::Schedule (dt, &UdpMultipathRouter::Send, this, p, s, addr, port);
 }
 
+void
+UdpMultipathRouter::CreatePath ( Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port,
+                                  uint32_t node_id, uint32_t channel_id )
+{
+  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
+  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
+  Ptr<Socket> socket;
+  socket = UdpMultipathRouter::initSendingSocket (socket, dest_port, dest_ip); 
+  nodeTable.AddNodeEntry(node_id, dest_ip, dest_port, socket, channel_id);
+}
+
+/*
 void 
 UdpMultipathRouter::SetPath0(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
 {
@@ -391,30 +432,7 @@ UdpMultipathRouter::SetPath0(Address source_ip, uint16_t source_port, Address de
   InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_0), m_sending_port_0);
   NS_LOG_INFO ("Remote 0 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
 }
-
-void
-UdpMultipathRouter::SetPath1(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
-{
-  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
-  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
-  incoming_sw_1.listen_port = source_port;
-  m_sending_address_1 = Address(dest_ip);
-  m_sending_port_1 = dest_port;
-  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_1), m_sending_port_1);
-  NS_LOG_INFO ("Remote 1 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
-}
-
-void
-UdpMultipathRouter::SetPath2(Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port)
-{
-  UdpMultipathRouter::CheckIpv4(source_ip, source_port);
-  UdpMultipathRouter::CheckIpv4(dest_ip, dest_port);
-  incoming_sw_2.listen_port = source_port;
-  m_sending_address_2 = Address(dest_ip);
-  m_sending_port_2 = dest_port;
-  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(m_sending_address_2), m_sending_port_2);
-  NS_LOG_INFO ("Remote 2 IPv4:" << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
-}
+*/
 
 //TODO finish this part
 void 

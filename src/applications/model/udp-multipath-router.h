@@ -40,21 +40,19 @@ class SocketWrapper
 {
 public:
   SocketWrapper();
-  SocketWrapper(Ptr<Socket>, uint16_t listen_port);
+  SocketWrapper(Ptr<Socket> socket, uint16_t listen_port);
   Ptr<Socket> socket;
   uint16_t listen_port;
 private:
 };
-
-
 
 class ChannelTableEntry
 {
 public:
   ChannelTableEntry (uint32_t link_id, uint32_t capacity);
   uint32_t channel_id;
-  uint32_t channel_capacity; // megabit/s
-  uint32_t current_use; // megabits/s
+  uint32_t channel_capacity; // megabits/s
+  uint32_t current_use;      // megabits/s
   Time last_measure;
   uint32_t byte_counter; // counts in kilobytes
 };
@@ -73,17 +71,15 @@ private:
   std::list<ChannelTableEntry> entries;
 };
 
-
 class NodeTableEntry
 {
 public:
-  NodeTableEntry(uint32_t node, Ipv4Address addr, 
+  NodeTableEntry(uint32_t node, Address addr, 
                      uint16_t port, Ptr<Socket> socket,
                      uint32_t link);
 
-private:
   uint32_t node_id;
-  Ipv4Address dest_addr;
+  Address dest_addr;
   uint16_t dest_port;
   Ptr<Socket> dest_socket;
   uint32_t channel_id;
@@ -94,6 +90,9 @@ class NodeTable
 {
 public:
   NodeTable ();
+  void AddNodeEntry( uint32_t node, Address addr, uint16_t port, Ptr<Socket> dest_socket, uint32_t channel_id );
+  std::list<NodeTableEntry> GetAvailableChannels ( uint32_t node_id );
+  void LogNodeTable( void );
 
 private:
   std::list<NodeTableEntry> entries;
@@ -103,10 +102,10 @@ private:
 class PathTableEntry
 {
 public:
-  PathTableEntry(Ipv4Address addr, uint16_t port, uint32_t node);
+  PathTableEntry(Address addr, uint16_t port, uint32_t node);
 
 private:
-  Ipv4Address src_addr;
+  Address src_addr;
   uint16_t src_port;
   uint32_t node_id;
 };
@@ -115,7 +114,7 @@ class PathTable
 {
 public:
   PathTable ();
-
+  void AddPathTableEntry( Address src_addr, uint16_t src_port, uint32_t node_id );
 private:
   std::list<PathTableEntry> entries;
 };
@@ -143,6 +142,8 @@ public:
   static TypeId GetTypeId (void);
   UdpMultipathRouter ();
   virtual ~UdpMultipathRouter ();
+  void CreatePath (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port,
+                   uint32_t node_id, uint32_t channel_id);
   void SetPath0 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
   void SetPath1 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
   void SetPath2 (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port);
@@ -171,18 +172,8 @@ private:
   SocketWrapper incoming_sw_0; //!< IPv4 Socket
   SocketWrapper incoming_sw_1; //!< IPv4 Socket
   SocketWrapper incoming_sw_2; //!< IPv4 Socket
+  std::list<SocketWrapper> incoming_sw_list;
 
-  /* Sending Section */
-  uint16_t m_sending_port_0; //!< Port on which we retransmit packets.
-  uint16_t m_sending_port_1; //!< Port on which we retransmit packets.
-  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
-  //  uint16_t m_sending_port_2; //!< Port on which we retransmit packets.
-  Ptr<Socket> m_sending_socket_0; //!< IPv4 Socket
-  Ptr<Socket> m_sending_socket_1; //!< IPv4 Socket
-  Ptr<Socket> m_sending_socket_2; //!< IPv4 Socket
-  Address m_sending_address_0; //!< Remote peer address
-  Address m_sending_address_1; //!< Remote peer address
-  Address m_sending_address_2; //!< Remote peer address
   void Send (uint32_t packet_size, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
   void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);
 
