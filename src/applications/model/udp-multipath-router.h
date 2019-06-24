@@ -43,8 +43,12 @@ public:
   uint32_t channel_id;
   uint32_t channel_capacity; // megabits/s
   uint32_t current_use;      // megabits/s
-  Time last_measure;
-  uint32_t byte_counter; // counts in kilobytes
+  Time last_measure;         // should update every second
+  uint32_t byte_counter;     // counts in kilobytes
+  uint64_t drop_threshold;   // not used (yet) - number of sent kilobytes before dropping
+  uint32_t dropped_packets;  // packet loss (usually kilobytes)
+  uint64_t byte_counter_sum; // keep byte counter history
+  uint64_t dropped_packets_sum; // keep dropped packets history
 };
 
 class ChannelTable
@@ -56,6 +60,9 @@ public:
   void UpdateChannelsCurrentUse();
   void LogChannelTable () ;
   void ScheduleChannelTableUpdate( Time dt );
+  void ScheduleChannelLog( );
+  uint32_t GetChannelAvailableCapacity(uint32_t channel_id);
+  void AddDroppedPacket(uint32_t channel_id);
 
 private:
   std::list<ChannelTableEntry> entries;
@@ -134,6 +141,7 @@ public:
                    uint32_t node_id, uint32_t channel_id);
   // Tables
   ChannelTable channelTable;
+  ChannelTable historicChannelTable; // Used for logging purposes only
   NodeTable nodeTable;
   PathTable pathTable;
 

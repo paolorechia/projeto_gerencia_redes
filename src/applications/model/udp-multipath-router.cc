@@ -33,6 +33,7 @@
 #include "udp-multipath-router.h"
 
 #define NODE_ERROR 16666
+#define CHANNEL_TABLE_REFRESH_RATE 0.1
 
 namespace ns3 {
 
@@ -48,6 +49,10 @@ ChannelTableEntry::ChannelTableEntry ( uint32_t id, uint32_t capacity )
   current_use = 0;
   last_measure = Simulator::Now();
   byte_counter = 0;
+  dropped_packets = 0;
+  byte_counter_sum = 0;
+  dropped_packets_sum = 0;
+  drop_threshold = 0;
 }
 ChannelTable::ChannelTable()
 {
@@ -76,21 +81,35 @@ void
 ChannelTable::UpdateChannelsCurrentUse( ) {
   Time current_time = Simulator::Now();
   std::list<ChannelTableEntry>::iterator it;
-  ChannelTable::LogChannelTable ( );
+  std::list<ChannelTableEntry>::iterator log_it;
   for (it = entries.begin(); it != entries.end(); ++it) {
     // Do time diff
     double time_diff = current_time.GetSeconds() -  (*it).last_measure.GetSeconds();
-    // Compute actual use
+    // Compute use in last time interval
     // Converts kilobyte counter to kilobits and then to megabits
-    (*it).current_use = (((*it).byte_counter * 8) / 1024) / time_diff; // Time diff should be 1s;
-    // reset byte_counter
-    (*it).byte_counter = 0;
+    // uint64_t use_in_last_interval = (((*it).byte_counter * 8) / 1024) / time_diff;
+    // Average last measure with current measure
+    // (*it).current_use = ( (*it).current_use + use_in_last_interval ) / 2;
+    (*it).current_use = (((*it).byte_counter * 8) / 1024) / time_diff;
     // update last_measure
     (*it).last_measure = current_time;
     // schedule new update
   }
-  ChannelTable::LogChannelTable ( );
-  ChannelTable::ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
+  LogChannelTable ();
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    (*it).byte_counter_sum += (*it).byte_counter;
+    (*it).dropped_packets_sum += (*it).dropped_packets;
+    // reset byte_counter
+    (*it).byte_counter = 0;
+    (*it).dropped_packets = 0;
+  }
+  ChannelTable::ScheduleChannelTableUpdate( Seconds ( CHANNEL_TABLE_REFRESH_RATE ) );
+}
+
+void 
+ChannelTable::ScheduleChannelLog( ) {
+//  LogChannelTable ();
+  Simulator::Schedule ( Seconds ( 1.0 ), &ChannelTable::ScheduleChannelLog, this );
 }
 
 void
@@ -98,16 +117,46 @@ ChannelTable::LogChannelTable( ) {
   std::list<ChannelTableEntry>::iterator it;
     NS_LOG_INFO( "===========================================" );
     NS_LOG_INFO( "ChannelTable at time: " << Simulator::Now() );
+    NS_LOG_INFO( 
+  "| id | \tcapacity| \tuse | \tlast_measure |" "\t kilobyte_counter | \t packet_loss | "
+  << "\t total_byte_count | \t total_dropped_packets |"
+                );
   for (it = entries.begin(); it != entries.end(); ++it) {
-    NS_LOG_INFO( "| id | \tcapacity| \tuse | \tlast_measure | \t kilobyte_counter " );
-    NS_LOG_INFO( "| " << (*it).channel_id << "|\t" << (*it).channel_capacity  << "\t|\t"
-                    << (*it).current_use << "|" << (*it).last_measure << "|\t" << (*it).byte_counter );
+    NS_LOG_INFO(
+                 "| " << (*it).channel_id << "|\t" << (*it).channel_capacity  << "\t|\t"
+                      << (*it).current_use << "|" << (*it).last_measure << "|\t" << (*it).byte_counter
+                      << "\t" << (*it).dropped_packets << "\t" << (*it).byte_counter_sum
+                      << "\t" << (*it).dropped_packets_sum << "|"
+                );
   }
 }
 
 void
 ChannelTable::ScheduleChannelTableUpdate ( Time dt ) {
   Simulator::Schedule ( dt, &ChannelTable::UpdateChannelsCurrentUse, this );
+}
+
+uint32_t
+ChannelTable::GetChannelAvailableCapacity(uint32_t channel_id)
+{
+  std::list<ChannelTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ((*it).channel_id == channel_id) {
+      return (*it).channel_capacity > (*it).current_use ? ( (*it).channel_capacity - (*it).current_use ) : 0;
+    }
+  }
+  return 0;
+}
+void
+ChannelTable::AddDroppedPacket(uint32_t channel_id)
+{
+  std::list<ChannelTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ((*it).channel_id == channel_id) {
+      (*it).dropped_packets+= 1;
+      return;
+    }
+  }
 }
 
 /* NodeTable methods */
@@ -162,6 +211,12 @@ NodeTable::LogNodeTable( ) {
 NodeTableEntry
 NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes ) {
   std::list<NodeTableEntry>::iterator it;
+  // TODO: implement load balancing here
+  /*
+  for (it = available_pathes.begin(); it != available_pathes.end(); ++it) {
+    if ( *it).    
+  }
+  */
   it = available_pathes.begin();
   return (*it);
 }
@@ -360,6 +415,7 @@ UdpMultipathRouter::StartApplication (void)
   UdpMultipathRouter::initReceivingSockets ( );
   UdpMultipathRouter::initSendingSockets ( );
   channelTable.ScheduleChannelTableUpdate( Seconds ( 1.0 ) );
+  channelTable.ScheduleChannelLog( );
   nodeTable.LogNodeTable();
   pathTable.LogPathTable();
 }
@@ -376,7 +432,6 @@ UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
 {
   NS_LOG_FUNCTION (this << socket);
 
-  NS_LOG_INFO(" Receiving ");
   Ptr<Packet> packet;
   Address from;
   Address localAddress;
@@ -423,6 +478,14 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
       std::list<NodeTableEntry> available_channels = nodeTable.GetAvailableChannels ( node_id );
       NS_LOG_LOGIC("Found " << available_channels.size() << " available channels ");
       NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels );
+      // Packet loss mechanism
+      uint32_t available_capacity = channelTable.GetChannelAvailableCapacity(chosenPath.channel_id);
+      NS_LOG_LOGIC (" Available capacity: " << available_capacity);
+      if (available_capacity == 0) {
+        // Dropped Packet
+        NS_LOG_LOGIC("Dropped packet... " << chosenPath.channel_id);
+        channelTable.AddDroppedPacket( chosenPath.channel_id );
+      } else {
       NS_LOG_LOGIC("Picked channel... " << chosenPath.channel_id);
       NS_LOG_LOGIC("Testing destination address and port");
       CheckIpv4(chosenPath.dest_addr, chosenPath.dest_port);
@@ -435,6 +498,7 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
                    );
       UdpMultipathRouter::Send (packet_size, chosenPath.dest_socket, chosenPath.dest_addr, chosenPath.dest_port);
 //      UdpMultipathRouter::ScheduleTransmit (Simulator::Now (), packet_size, tmp_socket, tmp_addr, send_port);
+      }
 }
 
 
