@@ -19,8 +19,6 @@
 #ifndef UDP_MULTIPATH_ROUTER
 #define UDP_MULTIPATH_ROUTER
 
-// #define NUMBER_PORTS 4
-
 #include "ns3/application.h"
 #include "ns3/event-id.h"
 #include "ns3/ptr.h"
@@ -86,10 +84,11 @@ class NodeTable
 {
 public:
   NodeTable ();
+  uint32_t FindSocketChannel( Ptr<Socket> ); // returns channel_id
   void AddNodeEntry( uint32_t node, Address addr, uint16_t port, Ptr<Socket> dest_socket, uint32_t channel_id );
   std::list<NodeTableEntry> GetAvailableChannels ( uint32_t node_id );
   void LogNodeTable( void );
-  NodeTableEntry ChooseBestPath ( std::list<NodeTableEntry> );
+  NodeTableEntry ChooseBestPath ( std::list<NodeTableEntry>, bool loadBalancing, ChannelTable channelTable );
   std::list<NodeTableEntry> entries;
 };
 
@@ -139,6 +138,7 @@ public:
   virtual ~UdpMultipathRouter ();
   void CreatePath (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port,
                    uint32_t node_id, uint32_t channel_id);
+  void ActivateLoadBalancing( bool );
   // Tables
   ChannelTable channelTable;
   ChannelTable historicChannelTable; // Used for logging purposes only
@@ -167,12 +167,7 @@ private:
   void Send (uint32_t packet_size, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
   void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);
 
-  uint32_t m_count; //!< Maximum number of packets the application will send
-  Time m_interval; //!< Packet inter-send time
-
-  uint32_t m_dataSize; //!< packet payload size (must be equal to m_size)
-  uint32_t m_sent; //!< Counter for sent packets
-
+  bool applyLoadBalancing;
   EventId m_sendEvent; //!< Event to send the next packet
 //  Ptr<Socket> m_sending_socketsocket_3; //!< IPv4 Socket
   Address m_local; //!< local multicast address
