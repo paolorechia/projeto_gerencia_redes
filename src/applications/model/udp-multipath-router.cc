@@ -123,7 +123,7 @@ ChannelTable::LogChannelTable( ) {
                 );
   for (it = entries.begin(); it != entries.end(); ++it) {
     NS_LOG_INFO(
-                 "| " << (*it).channel_id << "|\t" << (*it).channel_capacity  << "\t|\t"
+                 "|#ID:" << (*it).channel_id << "|\t" << (*it).channel_capacity  << "\t|\t"
                       << (*it).current_use << "|" << (*it).last_measure << "|\t" << (*it).byte_counter
                       << "\t" << (*it).dropped_packets << "\t" << (*it).byte_counter_sum
                       << "\t" << (*it).dropped_packets_sum << "|"
@@ -173,6 +173,17 @@ NodeTableEntry::NodeTableEntry(uint32_t node, Address addr,
 NodeTable::NodeTable()
 {
 }
+uint32_t
+NodeTable::FindSocketChannel( Ptr<Socket> socket )
+{
+  std::list<NodeTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ((*it).dest_socket == socket) {
+      return (*it).channel_id;
+    }
+  }
+  return NODE_ERROR;
+}
 void
 NodeTable::AddNodeEntry ( uint32_t node, Address addr, uint16_t port, Ptr<Socket> socket, uint32_t channel)
 {
@@ -209,16 +220,23 @@ NodeTable::LogNodeTable( ) {
   NS_LOG_INFO( "===========================================" );
 }
 NodeTableEntry
-NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes ) {
+NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes, bool loadBalancing , ChannelTable channelTable) {
   std::list<NodeTableEntry>::iterator it;
-  // TODO: implement load balancing here
-  /*
-  for (it = available_pathes.begin(); it != available_pathes.end(); ++it) {
-    if ( *it).    
-  }
-  */
   it = available_pathes.begin();
-  return (*it);
+  if ( loadBalancing == false ) {
+    return (*it);
+  }
+  uint32_t best_capacity = 0;
+  NodeTableEntry bestPath= (*it);
+  for (it = available_pathes.begin(); it != available_pathes.end(); ++it) {
+    uint32_t channel_capacity = channelTable.GetChannelAvailableCapacity( (*it).channel_id );
+    if ( channel_capacity > best_capacity ) {
+      NS_LOG_LOGIC( " Best capacity " << channel_capacity << " channel id: " << (*it).channel_id);
+      bestPath = (*it);
+      best_capacity = channel_capacity;
+    }
+  }
+  return bestPath;
 }
 /* PathTable methods */
 PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node, Ptr<Socket> socket)
@@ -296,6 +314,7 @@ UdpMultipathRouter::UdpMultipathRouter ()
 {
   NS_LOG_FUNCTION (this);
   m_sendEvent = EventId ();
+  applyLoadBalancing = true;
 }
 
 UdpMultipathRouter::~UdpMultipathRouter()
@@ -427,6 +446,13 @@ UdpMultipathRouter::StopApplication ()
   UdpMultipathRouter::closeReceivingSockets ( );
 }
 
+void
+UdpMultipathRouter::ActivateLoadBalancing( bool activate )
+{
+  UdpMultipathRouter::applyLoadBalancing = activate; 
+};
+
+
 void 
 UdpMultipathRouter::HandleRead (Ptr<Socket> socket)
 {
@@ -477,7 +503,9 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
       NS_LOG_LOGIC("Found node ID: " << node_id);
       std::list<NodeTableEntry> available_channels = nodeTable.GetAvailableChannels ( node_id );
       NS_LOG_LOGIC("Found " << available_channels.size() << " available channels ");
-      NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels );
+      NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels,
+                                                            UdpMultipathRouter::applyLoadBalancing,
+                                                            channelTable );
       // Packet loss mechanism
       uint32_t available_capacity = channelTable.GetChannelAvailableCapacity(chosenPath.channel_id);
       NS_LOG_LOGIC (" Available capacity: " << available_capacity);
@@ -523,7 +551,12 @@ void
 UdpMultipathRouter::Send (uint32_t packet_size, Ptr<Socket> socket, Address dest_addr, uint16_t dest_port)
 {
   Ptr<Packet> packet = Create<Packet>(packet_size);
-  channelTable.UpdateChannelByteCounter(0, packet_size / 1024);
+  // TODO: Find correct channel for this socket
+  uint32_t channel_id = nodeTable.FindSocketChannel( socket );
+  if (channel_id == NODE_ERROR) {
+    NS_ASSERT_MSG (false, "Router could not find channel id for sending socket!!");
+  }
+  channelTable.UpdateChannelByteCounter(channel_id, packet_size / 1024);
   NS_LOG_FUNCTION (this);
   CheckIpv4(dest_addr, dest_port);
   Address localAddress;
@@ -543,11 +576,6 @@ UdpMultipathRouter::CheckIpv4(Address ipv4address, uint16_t m_port) {
   if (Ipv4Address::IsMatchingType(ipv4address) != true) {
     NS_ASSERT_MSG (false, "Incompatible address type: " << ipv4address);
   }
-  /*
-  NS_LOG_INFO ("Checking IP: "<< ipv4address);
-  InetSocketAddress socket_addr = InetSocketAddress (Ipv4Address::ConvertFrom(ipv4address), m_port);
-  NS_LOG_INFO ("IPv4: " << InetSocketAddress::ConvertFrom (socket_addr).GetIpv4 () << " port " << InetSocketAddress::ConvertFrom (socket_addr).GetPort ());
-  */
 }
 
 
