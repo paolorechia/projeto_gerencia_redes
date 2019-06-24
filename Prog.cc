@@ -1,7 +1,7 @@
 
 /*
 
-./waf --run 'scratch/Prog scratch/Dados.txt'
+./waf --run 'scratch/Prog --file=scratch/Dados.txt --traffic=0 --time=12'
 
  */
 
@@ -13,14 +13,20 @@ NS_LOG_COMPONENT_DEFINE( "MainProgram" );
 // ==================================================================== //
 
 int main( int argc, char** argv ){
+  std::string File( "" );
+	double Time = 10.0;
+	bool Stats = false;
+	Uint Traffic = 0;
   LAN lan;
 
-  if( argc < 2 ){
-    puts( "Faltam argumentos!!\n\tPor favor informe o arquivo de entrada!!" );
-    return( 0 );
-  }
+  CommandLine cmd;
+  cmd.AddValue( "traffic", "Traffic", Traffic );
+  cmd.AddValue( "file", "File", File );
+  cmd.AddValue( "time", "Time", Time );
+  cmd.AddValue( "stats", "Packest stats", Stats );
+  cmd.Parse (argc, argv);
 
-  if( !lan.read( argv[ 1 ] ) ){
+  if( !lan.read( File.c_str() ) ){
     puts( "Não foi possível ler o arquivo!!" );
     return( 0 );
   }
@@ -28,25 +34,22 @@ int main( int argc, char** argv ){
 	lan.info();
 	puts( "\n\n==========================================\n\n" );
 
-  UdpEchoServerHelper echoServer( 9 );
-
-  ApplicationContainer serverApps = echoServer.Install( lan.ns3nodes.Get( 0 ) );
-  serverApps.Start( Seconds( 0.0 ) );
-  serverApps.Stop( Seconds( 1.0 ) );
-
-  UdpEchoClientHelper echoClient( lan.nodes[ 0 ].getDevice( 0 ).address(), 9 );
-  echoClient.SetAttribute( "MaxPackets", UintegerValue( 10 ) );
-  echoClient.SetAttribute( "Interval", TimeValue( Seconds( 0.5 ) ) );
-  echoClient.SetAttribute( "PacketSize", UintegerValue( 1024 ) );
-
-  ApplicationContainer clientApps = echoClient.Install( lan.ns3nodes.Get( lan.num_of_nodes - 1 ) );
-  clientApps.Start( Seconds( 0.0 ) );
-  clientApps.Stop( Seconds( 1.0 ) );
+	lan.setEcho( Traffic, Time );
 
   Simulator::Run();
   Simulator::Destroy();
 
-	printf( "\n\nResultados: %u / %u \n", lan.nodes[ 0 ].devices[ 0 ].receivedPackets(), lan.nodes[ lan.num_of_nodes - 1 ].devices[ 0 ].receivedPackets() );
+	if( Stats == true ){
+		puts( "Pacotes recebidos por cada dispositivo:" );
+		for( Uint Nn = 0 ; Nn < lan.N_Nodes ; Nn++ ){
+			printf( "\tNodo %d\n", Nn );
+			for( Uint Nm = 0 ; Nm < lan.N_Devices ; Nm++ )
+				if( lan.Devices[ Nm ].Node == Nn ){
+					std::cout << "\t  -- " << lan.Devices[ Nm ].DeviceIpv4;
+					printf( " = %u\n", lan.Devices[ Nm ].DeviceQueue->GetStats().nTotalReceivedPackets );
+				}
+		}
+	}
 
   return 0;
 }

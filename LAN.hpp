@@ -1,48 +1,108 @@
-#ifndef LAN_H
-#define LAN_H
+#ifndef LAN_HPP
+#define LAN_HPP
 
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/csma-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/applications-module.h"
+#include "ns3/ipv4-global-routing-helper.h"
+#include "ns3/traffic-control-module.h"
+#include "ns3/flow-monitor-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/yans-wifi-helper.h"
+#include "ns3/ssid.h"
+
+#include "ns3/animation-interface.h"
 #include "MyIpv4GlobalRoutingHelper.hpp"
-#include "MyNode.hpp"
+#include "ns3/ipv4-nix-vector-helper.h"
+#include "ns3/olsr-helper.h"
+#include "Basic.hpp"
+
+using namespace ns3;
+
+const char* CSMA_DEVICE  = "csma";
+const char* P2P_DEVICE   = "p2p";
+const char* WIFI_DEVICE  = "wifi";
+const char* WIFIS_DEVICE = "wifis";
+
+#define SMALL								0
+#define MEDIUM							1
+#define BIG									2
 
 // ==================================================================== //
 
-class LAN{
-  public:
-    unsigned int num_of_nodes, links;
-    NodeContainer ns3nodes;
-		MyNode* nodes;
+class Device{
+	public:
+		Uint									Node;					// Número do nodo ao qual está associado
+		Ptr<NetDevice>				DevicePtr;		// Apontador para o dispositivo
+		const char* 					DeviceType;		// Indica os tipos das tecnologias
+		Ipv4Address						DeviceIpv4;		// Indica os endereços das tecnologias
+		Ptr<QueueDisc>				DeviceQueue;	// Mede a quantidade de dados transmitidos pelo dispositivo
 
-	  PointToPointHelper p2p;
-		CsmaHelper csma;
-
-	  YansWifiChannelHelper wifichannel;
-	  YansWifiPhyHelper phy;
-		WifiHelper wifi;
-		WifiMacHelper wifimac;
-		Ssid ssid;
-		MobilityHelper mobility;
-	  TrafficControlHelper tch;
-
-	  Ipv4AddressHelper ipv4_n;
-
-  public:
-    LAN();
-    int read( char* path );
-
-		int p2p_connect( List<MyNode*> auxNodes );
-		int csma_connect( List<MyNode*> auxNodes );
-		int wifi_connect( List<MyNode*> auxNodes );
-		int wifiM_connect( List<MyNode*> auxNodes );
-
-		void info();
+	public:
+		Device(){
+			memset( this, 0 , sizeof( Device ) );
+		}
 };
 
 // -------------------------------------------------------------------- //
 
+class LAN{
+	public:
+		NodeContainer ns3nodes;
+		Uint N_Nodes;
+		Device* Devices;
+		Uint N_Devices;
+		Uint Links;
+
+	  PointToPointHelper p2p;
+		CsmaHelper csma;
+		WifiHelper wifi;
+		YansWifiPhyHelper wifiPhy;
+	  YansWifiChannelHelper wifiChannel;
+	  WifiMacHelper wifiMac;
+
+		Ssid ssid;
+		MobilityHelper mobility;
+	  TrafficControlHelper tch;
+	  Ipv4AddressHelper ipv4_n;
+
+	  AnimationInterface *Anim;
+
+	public:
+		LAN();
+
+		Ptr<Node> GetNode( Uint Nn );
+		Uint      Nodes_Len();
+
+		Device&   GetDevice( Uint Nn );
+		Uint      Devices_Len();
+
+		Uint N_NodeDevices( Uint Num );
+
+    int  read( const char* path );
+		void p2p_connect( NodeContainer tempNodes );
+		void csma_connect( NodeContainer tempNodes );
+		void wifi_connect( NodeContainer tempNodes );
+		void wifiS_connect( NodeContainer tempNodes );
+		void info();
+
+		void setEcho( Uint Quant, double Time );
+};
+
+// ==================================================================== //
+
 LAN::LAN(){
 
-	num_of_nodes = links = 0;
-	nodes = NULL;
+	Devices = new Device[ 512 ];
+	if( !Devices ){
+		puts( "Falha de alocação!!" );
+		exit( 0 );
+	}
+	N_Devices = N_Nodes = 0;
+	Links = 0;
 	
   Time::SetResolution( Time::NS );
   LogComponentEnable( "UdpEchoClientApplication", LOG_LEVEL_INFO );
@@ -56,11 +116,18 @@ LAN::LAN(){
   csma.SetChannelAttribute( "Delay", TimeValue( NanoSeconds( 6560 ) ) );
   csma.SetQueue( "ns3::DropTailQueue", "MaxSize", StringValue( "1p" ) );
 
-	wifichannel = YansWifiChannelHelper::Default();
-  phy = YansWifiPhyHelper::Default();
-  phy.SetChannel( wifichannel.Create() );
+  wifi.SetStandard( WIFI_PHY_STANDARD_80211b );
 
-	wifi.SetRemoteStationManager( "ns3::AarfWifiManager" );
+  wifiPhy = YansWifiPhyHelper::Default();
+  wifiPhy.Set( "RxGain", DoubleValue( 0 ) );
+  wifiPhy.SetPcapDataLinkType( WifiPhyHelper::DLT_IEEE802_11_RADIO );
+
+  wifiChannel.SetPropagationDelay( "ns3::ConstantSpeedPropagationDelayModel" );
+  wifiChannel.AddPropagationLoss( "ns3::FixedRssLossModel","Rss",DoubleValue( -80 ) );
+  wifiPhy.SetChannel( wifiChannel.Create() );
+
+  wifi.SetRemoteStationManager( "ns3::ConstantRateWifiManager", "DataMode", StringValue( "DsssRate1Mbps" ), "ControlMode", StringValue( "DsssRate1Mbps" ) );
+  wifiMac.SetType ("ns3::AdhocWifiMac");
 
   tch.SetRootQueueDisc( "ns3::RedQueueDisc" );
 
@@ -71,17 +138,62 @@ LAN::LAN(){
                                  "MinY", DoubleValue( 0.0 ),
                                  "DeltaX", DoubleValue( 5.0 ),
                                  "DeltaY", DoubleValue( 10.0 ),
-                                 "GridWidth", UintegerValue( 3 ),
+                                 "GridWidth", UintegerValue( 5 ),
                                  "LayoutType", StringValue( "RowFirst" ) );
+
+	Anim = NULL;
 }
 
 // -------------------------------------------------------------------- //
 
-int LAN::read( char* path ){
-	List<MyNode*> auxNodes;
+Ptr<Node> LAN::GetNode( Uint Nn ){
+
+	if( Nn >= this->Nodes_Len() )
+		return( NULL );
+
+	return( ns3nodes.Get( Nn ) );
+}
+
+// -------------------------------------------------------------------- //
+
+inline Uint LAN::Nodes_Len(){
+
+	return( N_Nodes );
+}
+
+// -------------------------------------------------------------------- //
+
+inline Device& LAN::GetDevice( Uint Nn ){
+
+	return( Devices[ Nn ] );
+}
+
+// -------------------------------------------------------------------- //
+
+inline Uint LAN::Devices_Len(){
+
+	return( N_Devices );
+}
+
+// -------------------------------------------------------------------- //
+
+Uint LAN::N_NodeDevices( Uint Num ){
+	Uint Nn, Nm;
+
+	Nm = 0;
+	for( Nn = 0 ; Nn < N_Devices ; Nn++ )
+		if( Devices[ Nn ].Node == Num )
+			Nm++;
+
+	return( Nm );
+}
+
+// -------------------------------------------------------------------- //
+
+int LAN::read( const char* path ){
 	char technology[ 16 ];
   FILE* fl = NULL;
-	int nodeNum;
+	int NodeNum;
 
   if( !path )
     return( 0 );
@@ -90,19 +202,22 @@ int LAN::read( char* path ){
   if( !fl )
     return( 0 );
 
-  fscanf( fl, "%u\n", &num_of_nodes );
-  if( !num_of_nodes )
+  fscanf( fl, "%u\n", &N_Nodes );
+  if( !N_Nodes )
     return( 0 );
 
-  ns3nodes.Create( num_of_nodes );
+  ns3nodes.Create( N_Nodes );
   InternetStackHelper stack;
-  stack.Install( ns3nodes );
+/*
+	OlsrHelper olsr;
+	Ipv4StaticRoutingHelper staticRouting;
+	Ipv4ListRoutingHelper list;
+	list.Add( staticRouting, 0 );
+	list.Add( olsr, 10 );
 
-	nodes = new MyNode[ num_of_nodes ];
-	if( !nodes )
-		return( 0 );
-	for( Uint n = 0 ; n < num_of_nodes ; n++ )
-		nodes[ n ].create( ns3nodes.Get( n ) );
+	stack.SetRoutingHelper( list );
+*/
+  stack.Install( ns3nodes );
 
 	while( !feof( fl ) ){
 
@@ -110,159 +225,207 @@ int LAN::read( char* path ){
 		fscanf( fl, "%16s", technology );
 		lowercase( technology );
 
-		auxNodes.Free();
-		while( readint( nodeNum, fl ) )
-			auxNodes << &nodes[ nodeNum ];
-		auxNodes << &nodes[ nodeNum ];
+		if( strlen( technology ) ){
+			NodeContainer Temp;
 
-		if( !strcmp( technology, P2P_DEVICE ) )
-			this->p2p_connect( auxNodes );
+			while( readint( NodeNum, fl ) )
+				Temp.Add( ns3nodes.Get( NodeNum ) );
+			Temp.Add( ns3nodes.Get( NodeNum ) );
 
-		else if( !strcmp( technology, CSMA_DEVICE ) )
-			this->csma_connect( auxNodes );
+			if( !strcmp( technology, P2P_DEVICE ) )
+				this->p2p_connect( Temp );
 
-		else if( !strcmp( technology, WIFI_DEVICE ) )
-			this->wifi_connect( auxNodes );
+			else if( !strcmp( technology, CSMA_DEVICE ) )
+				this->csma_connect( Temp );
 
-		else if( !strcmp( technology, WIFIM_DEVICE ) )
-			this->wifiM_connect( auxNodes );
+			else if( !strcmp( technology, WIFI_DEVICE ) )
+				this->wifi_connect( Temp );
 
-		else
-			break;
+			else if( !strcmp( technology, WIFIS_DEVICE ) )
+				this->wifiS_connect( Temp );
+
+			else
+				break;
+		}
 	}
 
-/*
 	char Temp[ 128 ];
 	strcpy( Temp, path );
 	strcpy( Temp + strlen( Temp ) - 3, "xml" );
-  AnimationInterface Anim( Temp );
+  Anim = new AnimationInterface( Temp );
 
-	for( Uint Nn = 0 ; Nn < ns3nodes.GetN() ; Nn++ ){
-		puts("Setando");
-		Ptr<Node> TempNode = ns3nodes.Get( Nn );
-		Anim.SetConstantPosition( TempNode, 100 + Nn, 200 + Nn * 2 );
-	}
-*/
-  Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+  MyIpv4GlobalRoutingHelper::PopulateRoutingTables();
 
   return( 1 );
 }
 
 // -------------------------------------------------------------------- //
 
-int LAN::p2p_connect( List<MyNode*> auxNodes ){
+void LAN::p2p_connect( NodeContainer tempNodes ){
 	Ipv4InterfaceContainer interfaces;
 	NetDeviceContainer n_devs;
-	NodeContainer tempNodes;
 	char base[ 32 ];
-	Ptr<Node>	node;
-	
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
-		tempNodes.Add( auxNodes[ Nn ]->ns3node );
 
-  links++;
-	sprintf( base, "10.1.%d.0", links );
+	sprintf( base, "10.1.%d.0", Links );
   ipv4_n.SetBase( base, "255.255.255.0" );
-
+	Links++;
 
   n_devs = p2p.Install( tempNodes );
   QueueDiscContainer qdiscs = tch.Install( n_devs );
   interfaces = ipv4_n.Assign( n_devs );
 
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ ){
-		node = tempNodes.Get( Nn );
-		auxNodes[ Nn ]->addDevice( n_devs.Get( Nn ), P2P_DEVICE, interfaces.GetAddress( Nn ), qdiscs.Get( Nn ) );
-	}
+  mobility.SetMobilityModel( "ns3::ConstantPositionMobilityModel" );
+  mobility.Install( tempNodes );
 
-	return( 0 );
+	for( Uint Nn = 0 ; Nn < interfaces.GetN() ; Nn++ ){
+		for( Uint Nm = 0 ; Nm < ns3nodes.GetN() ; Nm++ ){
+			if( ns3nodes.Get( Nm ) == tempNodes.Get( Nn ) ){
+				Devices[ N_Devices ].Node = Nm;
+				Devices[ N_Devices ].DevicePtr = n_devs.Get( Nn );
+				Devices[ N_Devices ].DeviceType = P2P_DEVICE;
+				Devices[ N_Devices ].DeviceIpv4 = interfaces.GetAddress( Nn );
+				Devices[ N_Devices ].DeviceQueue = qdiscs.Get( Nn );
+
+				N_Devices++;
+			}
+		}
+	}
 }
 
 // -------------------------------------------------------------------- //
 
-int LAN::csma_connect( List<MyNode*> auxNodes ){
+void LAN::csma_connect( NodeContainer tempNodes ){
 	Ipv4InterfaceContainer interfaces;
 	NetDeviceContainer n_devs;
-	NodeContainer tempNodes;
 	char base[ 32 ];
-	Ptr<Node>	node;
-	
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
-		tempNodes.Add( auxNodes[ Nn ]->ns3node );
 
-  links++;
-	sprintf( base, "10.1.%d.0", links );
+	sprintf( base, "10.1.%d.0", Links );
   ipv4_n.SetBase( base, "255.255.255.0" );
+	Links++;
 
   n_devs = csma.Install( tempNodes );
   QueueDiscContainer qdiscs = tch.Install( n_devs );
   interfaces = ipv4_n.Assign( n_devs );
 
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ ){
-		node = tempNodes.Get( Nn );
-		auxNodes[ Nn ]->addDevice( n_devs.Get( Nn ), CSMA_DEVICE, interfaces.GetAddress( Nn ), qdiscs.Get( Nn ) );
-	}
-
-	return( 0 );
-}
-
-// -------------------------------------------------------------------- //
-
-int LAN::wifi_connect( List<MyNode*> auxNodes ){
-	NodeContainer tempNodes;
-
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
-		tempNodes.Add( auxNodes[ Nn ]->ns3node );
-
-  wifimac.SetType( "ns3::StaWifiMac", "Ssid", SsidValue( ssid ), "ActiveProbing", BooleanValue( false ) );
-	wifi.Install( phy, wifimac, tempNodes );
-  mobility.SetMobilityModel( "ns3::RandomWalk2dMobilityModel", "Bounds", RectangleValue( Rectangle( -50, 50, -50, 50 ) ) );
-  mobility.Install( tempNodes );
-
-	return( 0 );
-}
-
-// -------------------------------------------------------------------- //
-
-int LAN::wifiM_connect( List<MyNode*> auxNodes ){
-	NodeContainer tempNodes;
-
-	for( Uint Nn = 0 ; Nn < auxNodes.Quant ; Nn++ )
-		tempNodes.Add( auxNodes[ Nn ]->ns3node );
-
-  wifimac.SetType( "ns3::ApWifiMac", "Ssid", SsidValue( ssid ) );
-	wifi.Install( phy, wifimac, tempNodes );
   mobility.SetMobilityModel( "ns3::ConstantPositionMobilityModel" );
   mobility.Install( tempNodes );
 
-	return( 0 );
+	for( Uint Nn = 0 ; Nn < interfaces.GetN() ; Nn++ ){
+		for( Uint Nm = 0 ; Nm < ns3nodes.GetN() ; Nm++ ){
+			if( ns3nodes.Get( Nm ) == tempNodes.Get( Nn ) ){
+				Devices[ N_Devices ].Node = Nm;
+				Devices[ N_Devices ].DevicePtr = n_devs.Get( Nn );
+				Devices[ N_Devices ].DeviceType = CSMA_DEVICE;
+				Devices[ N_Devices ].DeviceIpv4 = interfaces.GetAddress( Nn );
+				Devices[ N_Devices ].DeviceQueue = qdiscs.Get( Nn );
+
+				N_Devices++;
+			}
+		}
+	}
+}
+
+// -------------------------------------------------------------------- //
+
+void LAN::wifi_connect( NodeContainer tempNodes ){
+	Ipv4InterfaceContainer interfaces;
+	NetDeviceContainer n_devs;
+	char base[ 32 ];
+
+	static Byte Verif = 0;
+	if( Verif ){
+		puts( "Cannot create another wifi instance!!" );
+		return;
+	}
+	Verif++;
+
+	sprintf( base, "10.1.%d.0", Links );
+  ipv4_n.SetBase( base, "255.255.255.0" );
+	Links++;
+
+  n_devs = wifi.Install( wifiPhy, wifiMac, tempNodes );
+  QueueDiscContainer qdiscs = tch.Install( n_devs );
+  interfaces = ipv4_n.Assign( n_devs );
+
+  mobility.SetMobilityModel( "ns3::ConstantPositionMobilityModel" );
+  mobility.Install( tempNodes );
+
+	for( Uint Nn = 0 ; Nn < n_devs.GetN() ; Nn++ ){
+		for( Uint Nm = 0 ; Nm < ns3nodes.GetN() ; Nm++ ){
+			if( ns3nodes.Get( Nm ) == tempNodes.Get( Nn ) ){
+				Devices[ N_Devices ].Node = Nm;
+				Devices[ N_Devices ].DevicePtr = n_devs.Get( Nn );
+				Devices[ N_Devices ].DeviceType = WIFI_DEVICE;
+				Devices[ N_Devices ].DeviceIpv4 = interfaces.GetAddress( Nn );
+				Devices[ N_Devices ].DeviceQueue = qdiscs.Get( Nn );
+
+				N_Devices++;
+			}
+		}
+	}
+}
+
+// -------------------------------------------------------------------- //
+
+void LAN::wifiS_connect( NodeContainer tempNodes ){
+
 }
 
 // -------------------------------------------------------------------- //
 
 void LAN::info(){
 	NodeContainer::Iterator i;
-	unsigned int n, m;
+	unsigned int Nn, Nm;
 
-	/*
-	printf( "A rede possui %d nodos:\n", ns3nodes.GetN() );
-	for( i = ns3nodes.Begin(), n = 0 ; i != ns3nodes.End() ; i++, n++ ){
-    printf( "\tNodo %d possui %d conexões.\n", n, (*i)->GetNDevices() - 1 );
-		for( m = 1 ; m < (*i)->GetNDevices() ; m++ ){
-			printf( "\t\t[ %d ] - ", m );
-			std::cout << (*i)->GetDevice( m )->GetAddress() << '\n';
+	printf( "A rede possui %d nodos:\n", N_Nodes );
+	for( Nn = 0 ; Nn < N_Nodes ; Nn++ ){
+		Nm = this->N_NodeDevices( Nn );
+    printf( "\tNodo %d possui %d conexões.\n", Nn, Nm );
+		for( Nm = 0 ; Nm < N_Devices ; Nm++ ){
+			if( Devices[ Nm ].Node == Nn ){
+				printf( "\t\t%s : ", Devices[ Nm ].DeviceType );
+				std::cout << Devices[ Nm ].DeviceIpv4 << '\n';
+			}
 		}
   }
-	*/
+}
 
-	printf( "A rede possui %d nodos:\n", num_of_nodes );
-	for( n = 0 ; n < num_of_nodes ; n++ ){
-    printf( "\tNodo %d possui %d conexões.\n", n, nodes[ n ].num_of_devices() );
-		for( m = 0 ; m < nodes[ n ].num_of_devices() ; m++ ){
-			printf( "\t\t[ %d ] - %s : ", m, nodes[ n ].getDevice( m ).type() );
-			std::cout << nodes[ n ].getDevice( m ).address() << '\n';
+// -------------------------------------------------------------------- //
+
+void LAN::setEcho( Uint Quant, double Time ){
+
+  UdpEchoServerHelper echoServer( 9 );
+
+  ApplicationContainer serverApps = echoServer.Install( this->GetNode( 0 ) );
+  serverApps.Start( Seconds( 0.0 ) );
+  serverApps.Stop( Seconds( Time ) );
+
+  UdpEchoClientHelper echoClient( this->GetDevice( 0 ).DeviceIpv4, 9 );
+  echoClient.SetAttribute( "MaxPackets", UintegerValue( 0xffffffff ) );
+
+	srand( 0 );
+
+	echoClient.SetAttribute( "Interval", TimeValue( Seconds( 1.0 ) ) );
+	echoClient.SetAttribute( "PacketSize", UintegerValue( 1024 ) );
+
+	uint16_t port = 9;
+	for( Uint Nn = 1 ; Nn < N_Nodes - 1 ; Nn++ ){
+		for( Uint Nm = 0 ; Nm < Quant ; Nm++ ){
+			OnOffHelper onoff( "ns3::UdpSocketFactory", InetSocketAddress( Devices[ ( rand() % ( N_Devices - 2 ) ) + 1 ].DeviceIpv4, port ) );
+			onoff.SetAttribute( "OnTime", StringValue( "ns3::ConstantRandomVariable[Constant=1]" ) );
+			onoff.SetAttribute( "OffTime", StringValue( "ns3::ConstantRandomVariable[Constant=0]" ) );
+			onoff.SetAttribute( "DataRate", StringValue( "2kbps" ) );
+			onoff.SetAttribute( "PacketSize", UintegerValue( 1024 ) );
+
+			ApplicationContainer apps = onoff.Install( ns3nodes.Get( Nn ) );
+			apps.Start( Seconds( 0.0 ) );
+			apps.Stop( Seconds( Time ) );
 		}
-  }
+	}
 
+  ApplicationContainer clientApps = echoClient.Install( this->GetNode( N_Nodes - 1 ) );
+  clientApps.Start( Seconds( 0.0 ) );
+  clientApps.Stop( Seconds( Time ) );
 }
 
 // ==================================================================== //
