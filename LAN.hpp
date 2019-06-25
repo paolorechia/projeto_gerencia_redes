@@ -14,6 +14,11 @@
 #include "ns3/yans-wifi-helper.h"
 #include "ns3/ssid.h"
 
+#include "ns3/ipv4-nix-vector-helper.h"
+#include "ns3/olsr-helper.h"
+#include "ns3/aodv-helper.h"
+#include "ns3/dsdv-helper.h"
+
 #include "ns3/animation-interface.h"
 #include "MyIpv4GlobalRoutingHelper.hpp"
 #include "ns3/ipv4-nix-vector-helper.h"
@@ -25,11 +30,13 @@ using namespace ns3;
 const char* CSMA_DEVICE  = "csma";
 const char* P2P_DEVICE   = "p2p";
 const char* WIFI_DEVICE  = "wifi";
-const char* WIFIS_DEVICE = "wifis";
 
-#define SMALL								0
-#define MEDIUM							1
-#define BIG									2
+#define GLOBAL_ROUTING			0
+#define AODV_ROUTING				1
+#define OLSR_ROUTING				2
+#define DSDV_ROUTING				4
+#define NIX_ROUTING					8
+#define STATIC_ROUTING			16
 
 // ==================================================================== //
 
@@ -83,10 +90,10 @@ class LAN{
 		Uint N_NodeDevices( Uint Num );
 
     int  read( const char* path );
+    int  read( const char* path, Uint Flags );
 		void p2p_connect( NodeContainer tempNodes );
 		void csma_connect( NodeContainer tempNodes );
 		void wifi_connect( NodeContainer tempNodes );
-		void wifiS_connect( NodeContainer tempNodes );
 		void info();
 
 		void setEcho( Uint Quant, double Time );
@@ -190,7 +197,14 @@ Uint LAN::N_NodeDevices( Uint Num ){
 
 // -------------------------------------------------------------------- //
 
-int LAN::read( const char* path ){
+inline int LAN::read( const char* path ){
+
+	return( this->read( path, 0 ) );
+}
+
+// -------------------------------------------------------------------- //
+
+int LAN::read( const char* path, Uint Flags ){
 	char technology[ 16 ];
   FILE* fl = NULL;
 	int NodeNum;
@@ -208,15 +222,37 @@ int LAN::read( const char* path ){
 
   ns3nodes.Create( N_Nodes );
   InternetStackHelper stack;
-/*
-	OlsrHelper olsr;
-	Ipv4StaticRoutingHelper staticRouting;
-	Ipv4ListRoutingHelper list;
-	list.Add( staticRouting, 0 );
-	list.Add( olsr, 10 );
 
-	stack.SetRoutingHelper( list );
-*/
+	if( Flags ){
+		Ipv4ListRoutingHelper list;
+
+		if( Flags & AODV_ROUTING ){
+			AodvHelper aodv;
+			list.Add( aodv, 10 );
+		}
+
+		if( Flags & OLSR_ROUTING ){
+			OlsrHelper olsr;
+			list.Add( olsr, 8 );
+		}
+
+		if( Flags & DSDV_ROUTING ){
+			DsdvHelper dsdv;
+			list.Add( dsdv, 5 );
+		}
+
+		if( Flags & NIX_ROUTING ){
+			Ipv4NixVectorHelper nix;
+			list.Add( nix, 4 );
+		}
+
+		if( Flags & STATIC_ROUTING ){
+			Ipv4StaticRoutingHelper staticRouting;
+			list.Add( staticRouting, 0 );
+		}
+
+		stack.SetRoutingHelper( list );
+	}
   stack.Install( ns3nodes );
 
 	while( !feof( fl ) ){
@@ -240,9 +276,6 @@ int LAN::read( const char* path ){
 
 			else if( !strcmp( technology, WIFI_DEVICE ) )
 				this->wifi_connect( Temp );
-
-			else if( !strcmp( technology, WIFIS_DEVICE ) )
-				this->wifiS_connect( Temp );
 
 			else
 				break;
@@ -367,12 +400,6 @@ void LAN::wifi_connect( NodeContainer tempNodes ){
 
 // -------------------------------------------------------------------- //
 
-void LAN::wifiS_connect( NodeContainer tempNodes ){
-
-}
-
-// -------------------------------------------------------------------- //
-
 void LAN::info(){
 	NodeContainer::Iterator i;
 	unsigned int Nn, Nm;
@@ -408,6 +435,18 @@ void LAN::setEcho( Uint Quant, double Time ){
 	echoClient.SetAttribute( "Interval", TimeValue( Seconds( 1.0 ) ) );
 	echoClient.SetAttribute( "PacketSize", UintegerValue( 1024 ) );
 
+  ApplicationContainer clientApps = echoClient.Install( this->GetNode( N_Nodes - 1 ) );
+  clientApps.Start( Seconds( 0.0 ) );
+  clientApps.Stop( Seconds( Time ) );
+
+
+  Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> ();
+  routingApp->channelTable.AddChannelEntry( 0, 100 ); // CSMA Channel
+  routingApp->channelTable.AddChannelEntry( 1, 72 );  // Wi Fi 2.4 GHZ Channel
+  routingApp->CreatePath( this->GetDevice( 0 ).DeviceIpv4, 9, this->GetDevice( N_Nodes - 1 ).DeviceIpv4, 31, 0, 0 );
+
+  ns3nodes.Get( N_Nodes - 1 )->AddApplication( routingApp );
+
 	uint16_t port = 9;
 	for( Uint Nn = 1 ; Nn < N_Nodes - 1 ; Nn++ ){
 		for( Uint Nm = 0 ; Nm < Quant ; Nm++ ){
@@ -423,9 +462,7 @@ void LAN::setEcho( Uint Quant, double Time ){
 		}
 	}
 
-  ApplicationContainer clientApps = echoClient.Install( this->GetNode( N_Nodes - 1 ) );
-  clientApps.Start( Seconds( 0.0 ) );
-  clientApps.Stop( Seconds( Time ) );
+  Simulator::Stop( Seconds( Time ) );
 }
 
 // ==================================================================== //

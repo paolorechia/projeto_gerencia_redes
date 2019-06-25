@@ -2,7 +2,7 @@
 /*
 
 ./waf --run 'scratch/Prog --file=scratch/Dados.txt --traffic=0 --time=12'
-
+export NS_LOG=UdpMultipathRouterApplication=level_info
  */
 
 #include "LAN.hpp"
@@ -14,6 +14,7 @@ NS_LOG_COMPONENT_DEFINE( "MainProgram" );
 
 int main( int argc, char** argv ){
   std::string File( "" );
+	Uint RouterFlags = 0;
 	double Time = 10.0;
 	bool Stats = false;
 	Uint Traffic = 0;
@@ -24,9 +25,10 @@ int main( int argc, char** argv ){
   cmd.AddValue( "file", "File", File );
   cmd.AddValue( "time", "Time", Time );
   cmd.AddValue( "stats", "Packest stats", Stats );
+  cmd.AddValue( "routerFlags", "Router Flags", RouterFlags );
   cmd.Parse (argc, argv);
 
-  if( !lan.read( File.c_str() ) ){
+  if( !lan.read( File.c_str(), RouterFlags ) ){
     puts( "Não foi possível ler o arquivo!!" );
     return( 0 );
   }
