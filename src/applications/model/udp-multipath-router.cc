@@ -220,23 +220,32 @@ NodeTable::LogNodeTable( ) {
   NS_LOG_INFO( "===========================================" );
 }
 NodeTableEntry
-NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes, bool loadBalancing , ChannelTable channelTable) {
+NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes, BalancingAlgorithm algorithm, ChannelTable channelTable) {
   std::list<NodeTableEntry>::iterator it;
   it = available_pathes.begin();
-  if ( loadBalancing == false ) {
-    return (*it);
-  }
-  uint32_t best_capacity = 0;
-  NodeTableEntry bestPath= (*it);
-  for (it = available_pathes.begin(); it != available_pathes.end(); ++it) {
-    uint32_t channel_capacity = channelTable.GetChannelAvailableCapacity( (*it).channel_id );
-    if ( channel_capacity > best_capacity ) {
-      NS_LOG_LOGIC( " Best capacity " << channel_capacity << " channel id: " << (*it).channel_id);
-      bestPath = (*it);
-      best_capacity = channel_capacity;
+  switch (algorithm) {
+    case BalancingAlgorithm::NO_BALANCING: {
+      return (*it);
     }
+    case BalancingAlgorithm::TX_RATE: {
+      uint32_t best_capacity = 0;
+      NodeTableEntry bestPath= (*it);
+      for (it = available_pathes.begin(); it != available_pathes.end(); ++it) {
+        uint32_t channel_capacity = channelTable.GetChannelAvailableCapacity( (*it).channel_id );
+        if ( channel_capacity > best_capacity ) {
+          NS_LOG_LOGIC( " Best capacity " << channel_capacity << " channel id: " << (*it).channel_id);
+          bestPath = (*it);
+          best_capacity = channel_capacity;
+        }
+      }
+    return bestPath;
+    }
+    case BalancingAlgorithm::TX_DROP_THRESHOLD:
+      NS_ASSERT_MSG (false, " Balancing Algorithm not implemented ");
+      
+    default:
+      NS_ASSERT_MSG (false, " Balancing Algorithm not implemented ");
   }
-  return bestPath;
 }
 /* PathTable methods */
 PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node, Ptr<Socket> socket)
@@ -314,7 +323,7 @@ UdpMultipathRouter::UdpMultipathRouter ()
 {
   NS_LOG_FUNCTION (this);
   m_sendEvent = EventId ();
-  applyLoadBalancing = true;
+  balancingAlgorithm = BalancingAlgorithm::TX_RATE;
 }
 
 UdpMultipathRouter::~UdpMultipathRouter()
@@ -447,9 +456,9 @@ UdpMultipathRouter::StopApplication ()
 }
 
 void
-UdpMultipathRouter::ActivateLoadBalancing( bool activate )
+UdpMultipathRouter::SetLoadBalancing( BalancingAlgorithm algorithm)
 {
-  UdpMultipathRouter::applyLoadBalancing = activate; 
+  UdpMultipathRouter::balancingAlgorithm = algorithm; 
 };
 
 
@@ -504,7 +513,7 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
       std::list<NodeTableEntry> available_channels = nodeTable.GetAvailableChannels ( node_id );
       NS_LOG_LOGIC("Found " << available_channels.size() << " available channels ");
       NodeTableEntry chosenPath = nodeTable.ChooseBestPath( available_channels,
-                                                            UdpMultipathRouter::applyLoadBalancing,
+                                                            UdpMultipathRouter::balancingAlgorithm,
                                                             channelTable );
       // Packet loss mechanism
       uint32_t available_capacity = channelTable.GetChannelAvailableCapacity(chosenPath.channel_id);

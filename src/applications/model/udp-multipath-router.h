@@ -34,6 +34,8 @@ class Socket;
 class Packet;
 class Time;
 
+enum class BalancingAlgorithm { NO_BALANCING, TX_RATE, TX_DROP_THRESHOLD };
+
 class ChannelTableEntry
 {
 public:
@@ -88,7 +90,7 @@ public:
   void AddNodeEntry( uint32_t node, Address addr, uint16_t port, Ptr<Socket> dest_socket, uint32_t channel_id );
   std::list<NodeTableEntry> GetAvailableChannels ( uint32_t node_id );
   void LogNodeTable( void );
-  NodeTableEntry ChooseBestPath ( std::list<NodeTableEntry>, bool loadBalancing, ChannelTable channelTable );
+  NodeTableEntry ChooseBestPath ( std::list<NodeTableEntry>, BalancingAlgorithm algorithm, ChannelTable channelTable );
   std::list<NodeTableEntry> entries;
 };
 
@@ -138,7 +140,7 @@ public:
   virtual ~UdpMultipathRouter ();
   void CreatePath (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port,
                    uint32_t node_id, uint32_t channel_id);
-  void ActivateLoadBalancing( bool );
+  void SetLoadBalancing( BalancingAlgorithm algorithm );
   // Tables
   ChannelTable channelTable;
   ChannelTable historicChannelTable; // Used for logging purposes only
@@ -167,7 +169,7 @@ private:
   void Send (uint32_t packet_size, Ptr<Socket> m_socket, Address dest_addr, uint16_t dest_port);
   void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);
 
-  bool applyLoadBalancing;
+  BalancingAlgorithm balancingAlgorithm; 
   EventId m_sendEvent; //!< Event to send the next packet
 //  Ptr<Socket> m_sending_socketsocket_3; //!< IPv4 Socket
   Address m_local; //!< local multicast address

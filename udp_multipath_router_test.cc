@@ -33,7 +33,7 @@
 
 // Network Topology
 //
-//                        Wifi 10.1.3.0
+//              Wifi 10.1.3.0
 //                   AP
 //                   *          *
 //       10.1.1.0    |          |
@@ -70,8 +70,8 @@ main (int argc, char *argv[])
 
   cmd.Parse (argc,argv);
 
-  LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
-  LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
+//  LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_NONE);
+//  LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_NONE);
 
   nCsma = nCsma == 0 ? 1 : nCsma;
   
@@ -84,7 +84,7 @@ main (int argc, char *argv[])
   csmaNodes.Create (nCsma);
 
   PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
+  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Gbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("2ms"));
 
   NetDeviceContainer p2pDevices;
@@ -140,8 +140,8 @@ main (int argc, char *argv[])
   stack.Install (p2pNodes.Get (0));
   stack.Install (csmaNodes);
   // Redundant installs, but our topology may change, be aware!
-//  stack.Install (wifiApNode);
-//  stack.Install (wifiStaNodes);
+  // stack.Install (wifiApNode);
+  // stack.Install (wifiStaNodes);
 
   Ipv4AddressHelper address;
   // Point to point network
@@ -160,8 +160,7 @@ main (int argc, char *argv[])
   Ipv4InterfaceContainer staWifiInterfaces;
   staWifiInterfaces = address.Assign (staDevices);
 
-  //int maxPackets = 500000;
-  int maxPackets = 2;
+  int maxPackets = 500000;
   // Sender Client 1
   UdpEchoClientHelper echoClient (p2pInterfaces.GetAddress (1), 9);
   echoClient.SetAttribute ("MaxPackets", UintegerValue ( maxPackets ));
@@ -175,7 +174,7 @@ main (int argc, char *argv[])
   // Sender Client 2
   UdpEchoClientHelper echoClient2 (p2pInterfaces.GetAddress (1), 10);
   echoClient2.SetAttribute ("MaxPackets", UintegerValue (2));
-  echoClient2.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
+  echoClient2.SetAttribute ("Interval", TimeValue (Seconds ( 0.01 )));
   echoClient2.SetAttribute ("PacketSize", UintegerValue (1024));
 
   clientApps = echoClient2.Install (p2pNodes.Get (0));
@@ -184,8 +183,8 @@ main (int argc, char *argv[])
 
   // Sender Client 3
   UdpEchoClientHelper echoClient3 (p2pInterfaces.GetAddress (1), 11);
-  echoClient3.SetAttribute ("MaxPackets", UintegerValue (2));
-  echoClient3.SetAttribute ("Interval", TimeValue (Seconds (0.01)));
+  echoClient3.SetAttribute ("MaxPackets", UintegerValue ( maxPackets ));
+  echoClient3.SetAttribute ("Interval", TimeValue (Seconds ( PACKET_INTERVAL )));
   echoClient3.SetAttribute ("PacketSize", UintegerValue (1024));
 
   clientApps = echoClient3.Install (p2pNodes.Get (0));
@@ -214,7 +213,7 @@ main (int argc, char *argv[])
   Ptr<UdpMultipathRouter> routingApp = CreateObject<UdpMultipathRouter> ();
 
   routingApp->channelTable.AddChannelEntry( 0, 100 ); // CSMA Channel
-  routingApp->channelTable.AddChannelEntry( 1, 72 );  // Wi Fi 2.4 GHZ Channel
+  routingApp->channelTable.AddChannelEntry( 1, 72 );  // Wi-Fi 2.4 GHZ Channel
 
   routingApp->CreatePath(
                           p2pInterfaces.GetAddress ( 0 ),  // source address
@@ -235,13 +234,15 @@ main (int argc, char *argv[])
                         );
 
   routingApp->CreatePath( 
-                        p2pInterfaces.GetAddress ( 0 ),  // source address
-                        11,                              // source port
-                        staWifiInterfaces.GetAddress(0), // destination address
-                        33,                              // destination port
-                        1,                               // destination node id
-                        1                              // channel id
+                          p2pInterfaces.GetAddress ( 0 ),  // source address
+                          11,                              // source port
+                          staWifiInterfaces.GetAddress(0), // destination address
+                          33,                              // destination port
+                          1,                               // destination node id
+                          1                                // channel id
                        );
+
+  routingApp->SetLoadBalancing(BalancingAlgorithm::TX_RATE);
 
   p2pNodes.Get (1)->AddApplication(routingApp);
 
@@ -259,12 +260,14 @@ main (int argc, char *argv[])
 
   Simulator::Stop (Seconds (8.0));
 
-  AnimationInterface anim  ("second_test.xml");
+  AnimationInterface anim  ("multipath_router_test.xml");
   anim.SetConstantPosition( p2pNodes.Get(0), 0, 5);
   anim.SetConstantPosition( p2pNodes.Get(1), 5, 5);
   anim.SetConstantPosition( csmaNodes.Get(1), 10, 0);
   anim.SetConstantPosition( csmaNodes.Get(2), 10, 5);
   anim.SetConstantPosition( csmaNodes.Get(3), 10, 10);
+
+  csma.EnablePcap ("multipath_router_dev3", csmaDevices.Get (3), true);
 
   Simulator::Run ();
   Simulator::Destroy ();
