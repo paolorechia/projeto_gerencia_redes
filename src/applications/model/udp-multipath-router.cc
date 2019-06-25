@@ -52,7 +52,11 @@ ChannelTableEntry::ChannelTableEntry ( uint32_t id, uint32_t capacity )
   dropped_packets = 0;
   byte_counter_sum = 0;
   dropped_packets_sum = 0;
-  drop_threshold = 0;
+  // data rate in mbps * 1024 = data rate in kbps
+  // kbps / 8 = KB/s
+  // multiplied by second fraction
+  // yields max kilobits per refresh_rate, the desired drop threshold
+  drop_threshold =  (capacity * 1024 / 8) * CHANNEL_TABLE_REFRESH_RATE;
 }
 ChannelTable::ChannelTable()
 {
@@ -147,6 +151,19 @@ ChannelTable::GetChannelAvailableCapacity(uint32_t channel_id)
   }
   return 0;
 }
+
+uint32_t
+ChannelTable::GetAvailableBytes(uint32_t channel_id)
+{
+  std::list<ChannelTableEntry>::iterator it;
+  for (it = entries.begin(); it != entries.end(); ++it) {
+    if ((*it).channel_id == channel_id) {
+      return (*it).drop_threshold > (*it).byte_counter ? ( (*it).drop_threshold- (*it).byte_counter) : 0;
+    }
+  }
+  return 0;
+}
+
 void
 ChannelTable::AddDroppedPacket(uint32_t channel_id)
 {
@@ -238,14 +255,26 @@ NodeTable::ChooseBestPath ( std::list<NodeTableEntry> available_pathes, Balancin
           best_capacity = channel_capacity;
         }
       }
-    return bestPath;
+      return bestPath;
     }
-    case BalancingAlgorithm::TX_DROP_THRESHOLD:
-      NS_ASSERT_MSG (false, " Balancing Algorithm not implemented ");
-      
+    case BalancingAlgorithm::TX_DROP_THRESHOLD: {
+      uint32_t maximum = 0;
+      NodeTableEntry bestPath= (*it);
+      for (it = available_pathes.begin(); it != available_pathes.end(); ++it) {
+        uint32_t available_bytes = channelTable.GetAvailableBytes( (*it).channel_id );
+        if ( available_bytes > maximum) {
+          NS_LOG_LOGIC( " Maximum " << available_bytes << " channel id: " << (*it).channel_id);
+          bestPath = (*it);
+          maximum = available_bytes;
+        }
+      }
+      return bestPath;
+      break;
+    }
     default:
       NS_ASSERT_MSG (false, " Balancing Algorithm not implemented ");
   }
+  return (*it);
 }
 /* PathTable methods */
 PathTableEntry::PathTableEntry(Address addr, uint16_t port, uint32_t node, Ptr<Socket> socket)
@@ -324,6 +353,7 @@ UdpMultipathRouter::UdpMultipathRouter ()
   NS_LOG_FUNCTION (this);
   m_sendEvent = EventId ();
   balancingAlgorithm = BalancingAlgorithm::TX_RATE;
+  dropMode = DropMode::TX_RATE;
 }
 
 UdpMultipathRouter::~UdpMultipathRouter()
@@ -456,9 +486,15 @@ UdpMultipathRouter::StopApplication ()
 }
 
 void
-UdpMultipathRouter::SetLoadBalancing( BalancingAlgorithm algorithm)
+UdpMultipathRouter::SetLoadBalancing ( BalancingAlgorithm algorithm)
 {
   UdpMultipathRouter::balancingAlgorithm = algorithm; 
+};
+
+void
+UdpMultipathRouter::SetDropMode ( DropMode drop)
+{
+  UdpMultipathRouter::dropMode = drop; 
 };
 
 
@@ -516,9 +552,27 @@ UdpMultipathRouter::RoutePacket (uint32_t packet_size, Address from, Ptr<Socket>
                                                             UdpMultipathRouter::balancingAlgorithm,
                                                             channelTable );
       // Packet loss mechanism
-      uint32_t available_capacity = channelTable.GetChannelAvailableCapacity(chosenPath.channel_id);
-      NS_LOG_LOGIC (" Available capacity: " << available_capacity);
-      if (available_capacity == 0) {
+      uint32_t drop_test = 0;
+      switch (UdpMultipathRouter::dropMode) {
+        case DropMode::NO_DROPPING: {
+              drop_test = 1;
+              break;
+        }
+        case DropMode::TX_RATE: {
+          drop_test = channelTable.GetChannelAvailableCapacity(chosenPath.channel_id);
+          NS_LOG_LOGIC (" Available capacity: " << drop_test);
+          break;
+        }
+        case DropMode::TX_DROP_THRESHOLD: {
+          drop_test = channelTable.GetAvailableBytes(chosenPath.channel_id);
+          NS_LOG_LOGIC (" Available bytes : " << drop_test);
+          break;
+        }
+        default:
+          NS_ASSERT_MSG (false, "Invalid drop mode" );
+      }
+      
+      if (drop_test == 0) {
         // Dropped Packet
         NS_LOG_LOGIC("Dropped packet... " << chosenPath.channel_id);
         channelTable.AddDroppedPacket( chosenPath.channel_id );

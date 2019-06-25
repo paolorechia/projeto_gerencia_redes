@@ -35,6 +35,7 @@ class Packet;
 class Time;
 
 enum class BalancingAlgorithm { NO_BALANCING, TX_RATE, TX_DROP_THRESHOLD };
+enum class DropMode { NO_DROPPING, TX_RATE, TX_DROP_THRESHOLD };
 
 class ChannelTableEntry
 {
@@ -62,6 +63,7 @@ public:
   void ScheduleChannelTableUpdate( Time dt );
   void ScheduleChannelLog( );
   uint32_t GetChannelAvailableCapacity(uint32_t channel_id);
+  uint32_t GetAvailableBytes(uint32_t channel_id);
   void AddDroppedPacket(uint32_t channel_id);
 
 private:
@@ -141,6 +143,7 @@ public:
   void CreatePath (Address source_ip, uint16_t source_port, Address dest_ip, uint16_t dest_port,
                    uint32_t node_id, uint32_t channel_id);
   void SetLoadBalancing( BalancingAlgorithm algorithm );
+  void SetDropMode ( DropMode drop_mode);
   // Tables
   ChannelTable channelTable;
   ChannelTable historicChannelTable; // Used for logging purposes only
@@ -170,6 +173,7 @@ private:
   void ScheduleTransmit (Time dt, uint32_t packet_size, Ptr<Socket> s, Address addr, uint16_t port);
 
   BalancingAlgorithm balancingAlgorithm; 
+  DropMode dropMode; 
   EventId m_sendEvent; //!< Event to send the next packet
 //  Ptr<Socket> m_sending_socketsocket_3; //!< IPv4 Socket
   Address m_local; //!< local multicast address

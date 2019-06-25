@@ -242,7 +242,8 @@ main (int argc, char *argv[])
                           1                                // channel id
                        );
 
-  routingApp->SetLoadBalancing(BalancingAlgorithm::TX_RATE);
+  routingApp->SetLoadBalancing(BalancingAlgorithm::TX_DROP_THRESHOLD);
+  routingApp->SetDropMode(DropMode::TX_DROP_THRESHOLD);
 
   p2pNodes.Get (1)->AddApplication(routingApp);
 
