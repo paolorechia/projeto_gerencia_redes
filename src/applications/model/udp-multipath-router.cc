@@ -123,7 +123,7 @@ ChannelTable::LogChannelTable( ) {
     NS_LOG_INFO( "ChannelTable at time: " << Simulator::Now() );
     NS_LOG_INFO( 
   "| id | \tcapacity| \tuse | \tlast_measure |" "\t kilobyte_counter | \t packet_loss | "
-  << "\t total_byte_count | \t total_dropped_packets |"
+  << "\t total_kilobyte_count | \t total_dropped_packets | drop_threshold"
                 );
   for (it = entries.begin(); it != entries.end(); ++it) {
     NS_LOG_INFO(
@@ -131,6 +131,7 @@ ChannelTable::LogChannelTable( ) {
                       << (*it).current_use << "|" << (*it).last_measure << "|\t" << (*it).byte_counter
                       << "\t" << (*it).dropped_packets << "\t" << (*it).byte_counter_sum
                       << "\t" << (*it).dropped_packets_sum << "|"
+                      << "\t" << (*it).drop_threshold << "|"
                 );
   }
 }
