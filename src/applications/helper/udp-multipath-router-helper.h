@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Paolo Rechia <paolorechia@gmail.com>
+ * Authors: Paolo Rechia <paolorechia at gmail dot com>
  *          Eric
  */
 #ifndef UDP_MULTIPATH_ROUTER_HELPER_H
